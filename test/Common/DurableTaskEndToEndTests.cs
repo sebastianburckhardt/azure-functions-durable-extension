@@ -2394,9 +2394,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_SignalAndCallStringStore(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_SignalAndCallStringStore(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2406,7 +2405,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_SignalAndCallStringStore),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2432,9 +2432,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_StringStoreWithCreateDelete(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_StringStoreWithCreateDelete(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2444,7 +2443,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_StringStoreWithCreateDelete),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2465,9 +2465,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_SignalThenPoll(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_SignalThenPoll(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2477,7 +2476,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_SignalThenPoll),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2503,9 +2503,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_LargeEntity(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_LargeEntity(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2515,7 +2514,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_LargeEntity),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2544,14 +2544,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory + "_UnpublishedDependencies")]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_EntityToAndFromBlob(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_EntityToAndFromBlob(bool extendedSessions, string storageProvider)
         {
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_EntityToAndFromBlob),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2601,9 +2601,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_LockedIncrements(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_LockedIncrements(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2612,7 +2611,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_LockedIncrements),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2654,14 +2654,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_SingleLockedTransfer(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_SingleLockedTransfer(bool extendedSessions, string storageProvider)
         {
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_SingleLockedTransfer),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2696,10 +2696,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true, 5)]
-        [InlineData(false, 5)]
-        public async Task DurableEntity_MultipleLockedTransfers(bool extendedSessions, int numberEntities)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_MultipleLockedTransfers(bool extendedSessions, string storageProvider)
         {
+            var numberEntities = 5;
+
             string[] orchestratorFunctionNames =
             {
                 nameof(TestOrchestrations.LockedTransfer),
@@ -2707,7 +2708,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_MultipleLockedTransfers),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2771,14 +2773,16 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// <summary>
         /// Test which validates that actors can safely make async I/O calls.
         /// </summary>
-        [Fact]
+        [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        public async Task DurableEntity_AsyncIO()
+        [MemberData(nameof(TestDataGenerator.GetFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_AsyncIO(string storageProvider)
         {
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_AsyncIO),
-                enableExtendedSessions: false))
+                enableExtendedSessions: false,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2815,9 +2819,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_EntityNameCaseInsensitivity(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_EntityNameCaseInsensitivity(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2827,7 +2830,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_EntityNameCaseInsensitivity),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2860,9 +2864,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 #else
         [Trait("Category", PlatformSpecificHelpers.FlakeyTestCategory)]
 #endif
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_BasicObjects(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_BasicObjects(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2871,7 +2874,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_BasicObjects),
-                extendedSessions))
+                extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2893,9 +2897,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_EntityProxy(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_EntityProxy(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {
@@ -2904,7 +2907,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_EntityProxy),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -2978,7 +2982,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
                 nameof(this.DurableEntity_EntityProxy),
-                extendedSessions))
+                enableExtendedSessions: extendedSessions,
+                storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 

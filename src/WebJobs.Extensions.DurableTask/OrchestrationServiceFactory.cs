@@ -2,9 +2,11 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using DurableTask.AzureStorage;
 using DurableTask.Core;
 using DurableTask.Emulator;
+using DurableTask.EventSourced;
 using DurableTask.Redis;
 using Microsoft.Azure.WebJobs.Extensions.DurableTask.Options;
 using Microsoft.Extensions.Options;
@@ -33,6 +35,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     return new EmulaterOrchestrationServiceFactory(options);
                 case RedisStorageOptions redisStorageOptions:
                     return new RedisOrchestrationServiceFactory(options, connectionStringResolver);
+                case EventSourcedStorageOptions eventSourcedStorageOptions:
+                    return new EventSourcedOrchestrationServiceFactory(options, connectionStringResolver);
                 default:
                     throw new InvalidOperationException($"{configuredProvider.GetType()} is not a supported storage provider.");
             }
@@ -226,6 +230,92 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public IOrchestrationService GetOrchestrationService()
             {
                 return this.defaultTaskHubService;
+            }
+        }
+
+        private class EventSourcedOrchestrationServiceFactory : IOrchestrationServiceFactory
+        {
+            private readonly Entry entry;
+
+            // if running in test environment, we keep a service running and
+            // cache it in a static variable. Also, we delete previous taskhub before first run.
+            private static Entry cachedEntry;
+
+            public EventSourcedOrchestrationServiceFactory(DurableTaskOptions options, IConnectionStringResolver connectionStringResolver)
+            {
+                var runningInTestEnvironment = options.StorageProvider.EventSourced.RunningInTestEnvironment;
+
+                var settings = new EventSourcedOrchestrationServiceSettings()
+                {
+                    StorageConnectionString = connectionStringResolver.Resolve(options.StorageProvider.EventSourced.ConnectionStringName),
+                    EventHubsConnectionString = connectionStringResolver.Resolve(options.StorageProvider.EventSourced.EventHubsConnectionStringName),
+                    MaxConcurrentTaskActivityWorkItems = options.MaxConcurrentActivityFunctions,
+                    MaxConcurrentTaskOrchestrationWorkItems = options.MaxConcurrentOrchestratorFunctions,
+                    KeepServiceRunning = runningInTestEnvironment,
+                };
+
+                if (runningInTestEnvironment && cachedEntry != null)
+                {
+                    if (settings.Equals(cachedEntry.Settings))
+                    {
+                        // we simply use the cached orchestration service, which is still running.
+                        this.entry = cachedEntry;
+                        cachedEntry.TaskHubName = options.HubName;
+                        return;
+                    }
+                    else
+                    {
+                        if (cachedEntry.OrchestrationService != null)
+                        {
+                            // the service must be stopped now since we are about to start
+                            // a new one with different settings
+                            ((IOrchestrationService)cachedEntry.OrchestrationService).StopAsync().Wait();
+                        }
+                    }
+                }
+
+                this.entry = new Entry()
+                {
+                    Settings = settings,
+                    OrchestrationService = new EventSourcedOrchestrationService(settings),
+                    TaskHubName = options.HubName,
+                };
+
+                if (runningInTestEnvironment)
+                {
+                    if (cachedEntry == null)
+                    {
+                        ((IOrchestrationService)this.entry.OrchestrationService).DeleteAsync().Wait();
+                    }
+
+                    cachedEntry = this.entry;
+                }
+            }
+
+            public IOrchestrationServiceClient GetOrchestrationClient(OrchestrationClientAttribute attribute)
+            {
+                if (string.IsNullOrEmpty(attribute.TaskHub) || string.Equals(attribute.TaskHub, this.entry.TaskHubName))
+                {
+                    return this.entry.OrchestrationService;
+                }
+                else
+                {
+                    throw new InvalidOperationException("eventsourced client does not support using multiple task hubs");
+                }
+            }
+
+            public IOrchestrationService GetOrchestrationService()
+            {
+                return this.entry.OrchestrationService;
+            }
+
+            private class Entry
+            {
+                public EventSourcedOrchestrationServiceSettings Settings { get; set; }
+
+                public EventSourcedOrchestrationService OrchestrationService { get; set; }
+
+                public string TaskHubName { get; set; }
             }
         }
     }

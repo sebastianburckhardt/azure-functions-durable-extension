@@ -30,11 +30,16 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Options
         /// </summary>
         public RedisStorageOptions Redis { get; set; }
 
+        /// <summary>
+        /// The section for configuration related to the EventSourced provider.
+        /// </summary>
+        public EventSourcedStorageOptions EventSourced { get; set; }
+
         internal CommonStorageProviderOptions GetConfiguredProvider()
         {
             if (this.configuredProvider == null)
             {
-                var storageProviderOptions = new CommonStorageProviderOptions[] { this.AzureStorage, this.Emulator, this.Redis };
+                var storageProviderOptions = new CommonStorageProviderOptions[] { this.AzureStorage, this.Emulator, this.Redis, this.EventSourced };
                 var activeProviders = storageProviderOptions.Where(provider => provider != null);
                 if (!activeProviders.Any())
                 {
