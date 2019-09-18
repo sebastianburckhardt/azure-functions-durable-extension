@@ -2971,9 +2971,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task DurableEntity_EntityProxy_NameResolve(bool extendedSessions)
+        [MemberData(nameof(TestDataGenerator.GetExtendedSessionAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task DurableEntity_EntityProxy_NameResolve(bool extendedSessions, string storageProvider)
         {
             string[] orchestratorFunctionNames =
             {

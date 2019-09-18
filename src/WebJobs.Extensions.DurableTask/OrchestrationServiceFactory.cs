@@ -292,7 +292,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 }
             }
 
-            public IOrchestrationServiceClient GetOrchestrationClient(OrchestrationClientAttribute attribute)
+            public IOrchestrationServiceClient GetOrchestrationClient(DurableClientAttribute attribute)
             {
                 if (string.IsNullOrEmpty(attribute.TaskHub) || string.Equals(attribute.TaskHub, this.entry.TaskHubName))
                 {
