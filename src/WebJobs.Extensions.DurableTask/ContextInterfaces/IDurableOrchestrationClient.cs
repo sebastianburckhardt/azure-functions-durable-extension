@@ -9,9 +9,8 @@ using System.Threading.Tasks;
 using DurableTask.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 
-namespace Microsoft.Azure.WebJobs
+namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
     /// <summary>
     /// Provides functionality available to durable orchestration clients.
@@ -36,8 +35,11 @@ namespace Microsoft.Azure.WebJobs
         /// </remarks>
         /// <param name="request">The HTTP request that triggered the current orchestration instance.</param>
         /// <param name="instanceId">The ID of the orchestration instance to check.</param>
+        /// <param name="returnInternalServerErrorOnFailure">Optional parameter that configures the http response code returned. Defaults to <c>false</c>.
+        /// If <c>true</c>, the returned http response code will be a 500 when the orchestrator is in a failed state, when <c>false</c> it will
+        /// return 200.</param>
         /// <returns>An HTTP 202 response with a Location header and a payload containing instance control URLs.</returns>
-        HttpResponseMessage CreateCheckStatusResponse(HttpRequestMessage request, string instanceId);
+        HttpResponseMessage CreateCheckStatusResponse(HttpRequestMessage request, string instanceId, bool returnInternalServerErrorOnFailure = false);
 
         /// <summary>
         /// Creates an HTTP response that is useful for checking the status of the specified instance.
@@ -49,8 +51,11 @@ namespace Microsoft.Azure.WebJobs
         /// </remarks>
         /// <param name="request">The HTTP request that triggered the current orchestration instance.</param>
         /// <param name="instanceId">The ID of the orchestration instance to check.</param>
+        /// <param name="returnInternalServerErrorOnFailure">Optional parameter that configures the http response code returned. Defaults to <c>false</c>.
+        /// If <c>true</c>, the returned http response code will be a 500 when the orchestrator is in a failed state, when <c>false</c> it will
+        /// return 200.</param>
         /// <returns>An HTTP 202 response with a Location header and a payload containing instance control URLs.</returns>
-        IActionResult CreateCheckStatusResponse(HttpRequest request, string instanceId);
+        IActionResult CreateCheckStatusResponse(HttpRequest request, string instanceId, bool returnInternalServerErrorOnFailure = false);
 
         /// <summary>
         /// Creates a <see cref="HttpManagementPayload"/> object that contains status, terminate and send external event HTTP endpoints.
@@ -67,7 +72,7 @@ namespace Microsoft.Azure.WebJobs
         /// If the orchestration instance completes within the specified timeout, then the HTTP response payload will
         /// contain the output of the orchestration instance formatted as JSON. However, if the orchestration does not
         /// complete within the specified timeout, then the HTTP response will be identical to that of the
-        /// <see cref="CreateCheckStatusResponse(HttpRequestMessage, string)"/> API.
+        /// <see cref="CreateCheckStatusResponse(HttpRequestMessage, string, bool)"/> API.
         /// </remarks>
         /// <param name="request">The HTTP request that triggered the current function.</param>
         /// <param name="instanceId">The unique ID of the instance to check.</param>
@@ -88,7 +93,7 @@ namespace Microsoft.Azure.WebJobs
         /// If the orchestration instance completes within the specified timeout, then the HTTP response payload will
         /// contain the output of the orchestration instance formatted as JSON. However, if the orchestration does not
         /// complete within the specified timeout, then the HTTP response will be identical to that of the
-        /// <see cref="CreateCheckStatusResponse(HttpRequest, string)"/> API.
+        /// <see cref="CreateCheckStatusResponse(HttpRequest, string, bool)"/> API.
         /// </remarks>
         /// <param name="request">The HTTP request that triggered the current function.</param>
         /// <param name="instanceId">The unique ID of the instance to check.</param>
@@ -111,12 +116,13 @@ namespace Microsoft.Azure.WebJobs
         /// <param name="orchestratorFunctionName">The name of the orchestrator function to start.</param>
         /// <param name="instanceId">The ID to use for the new orchestration instance.</param>
         /// <param name="input">JSON-serializeable input value for the orchestrator function.</param>
+        /// <typeparam name="T">The type of the input value for the orchestrator function.</typeparam>
         /// <returns>A task that completes when the orchestration is started. The task contains the instance id of the started
         /// orchestratation instance.</returns>
         /// <exception cref="ArgumentException">
         /// The specified function does not exist, is disabled, or is not an orchestrator function.
         /// </exception>
-        Task<string> StartNewAsync(string orchestratorFunctionName, string instanceId, object input);
+        Task<string> StartNewAsync<T>(string orchestratorFunctionName, string instanceId, T input);
 
         /// <summary>
         /// Sends an event notification message to a waiting orchestration instance.
@@ -182,6 +188,7 @@ namespace Microsoft.Azure.WebJobs
         /// <param name="instanceId">The ID of the orchestration instance to rewind.</param>
         /// <param name="reason">The reason for rewinding the orchestration instance.</param>
         /// <returns>A task that completes when the rewind message is enqueued.</returns>
+        [Obsolete("This feature is in preview.")]
         Task RewindAsync(string instanceId, string reason);
 
         /// <summary>
@@ -192,7 +199,7 @@ namespace Microsoft.Azure.WebJobs
         /// <param name="showHistoryOutput">Boolean marker for including input and output in the execution history response.</param>
         /// <param name="showInput">If set, fetch and return the input for the orchestration instance.</param>
         /// <returns>Returns a task which completes when the status has been fetched.</returns>
-        Task<DurableOrchestrationStatus> GetStatusAsync(string instanceId, bool showHistory, bool showHistoryOutput, bool showInput = true);
+        Task<DurableOrchestrationStatus> GetStatusAsync(string instanceId, bool showHistory, bool showHistoryOutput, bool showInput);
 
         /// <summary>
         /// Gets all the status of the orchestration instances.

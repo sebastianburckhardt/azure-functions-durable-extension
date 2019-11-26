@@ -8,7 +8,6 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs.Extensions.DurableTask.Options;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -1225,18 +1224,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 PublishRetryHttpStatus = retryStatus,
             };
 
-            options.StorageProvider = new StorageProviderOptions
-            {
-                AzureStorage = new AzureStorageOptions(),
-            };
-
-            IOptions<DurableTaskOptions> wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
+            var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
             var connectionStringResolver = new TestConnectionStringResolver();
+            var loggerFactory = new LoggerFactory();
             var extension = new DurableTaskExtension(
                 wrappedOptions,
-                new LoggerFactory(),
+                loggerFactory,
                 mockNameResolver.Object,
-                new OrchestrationServiceFactory(wrappedOptions, connectionStringResolver));
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, connectionStringResolver, loggerFactory));
 
             var eventGridLifeCycleNotification = (EventGridLifeCycleNotificationHelper)extension.LifeCycleNotificationHelper;
 
@@ -1254,62 +1249,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
         [Fact]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        public void OrchestrationCustomHelperTypeActivationSuccess()
-        {
-            var options = new DurableTaskOptions
-            {
-                CustomLifeCycleNotificationHelperType = typeof(TestLifeCycleNotificationHelper).AssemblyQualifiedName,
-            };
-            options.StorageProvider = new StorageProviderOptions
-            {
-                AzureStorage = new AzureStorageOptions(),
-            };
-            options.HubName = "DurableTaskHub";
-
-            IOptions<DurableTaskOptions> wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
-            var connectionStringResolver = new TestConnectionStringResolver();
-            var extension = new DurableTaskExtension(
-                wrappedOptions,
-                new LoggerFactory(),
-                new SimpleNameResolver(),
-                new OrchestrationServiceFactory(wrappedOptions, connectionStringResolver));
-
-            var lifeCycleNotificationHelper = extension.LifeCycleNotificationHelper;
-
-            Assert.NotNull(lifeCycleNotificationHelper);
-            Assert.IsType<TestLifeCycleNotificationHelper>(lifeCycleNotificationHelper);
-        }
-
-        [Fact]
-        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         public void OrchestrationCustomHelperTypeActivationFailed()
-        {
-            var options = new DurableTaskOptions
-            {
-                CustomLifeCycleNotificationHelperType = "Test.TestLifeCycleNotificationHelper",
-            };
-            options.StorageProvider = new StorageProviderOptions
-            {
-                AzureStorage = new AzureStorageOptions(),
-            };
-            options.HubName = "DurableTaskHub";
-
-            var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
-            var extension = new DurableTaskExtension(
-                wrappedOptions,
-                new LoggerFactory(),
-                new SimpleNameResolver(),
-                new OrchestrationServiceFactory(wrappedOptions, new TestConnectionStringResolver()));
-
-            var lifeCycleNotificationHelper = extension.LifeCycleNotificationHelper;
-
-            Assert.NotNull(lifeCycleNotificationHelper);
-            Assert.IsType<NullLifeCycleNotificationHelper>(lifeCycleNotificationHelper);
-        }
-
-        [Fact]
-        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        public void OrchestrationCustomHelperTypeFallback()
         {
             var options = new DurableTaskOptions
             {
@@ -1322,24 +1262,59 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                         TopicEndpoint = null,
                     },
                 },
-                CustomLifeCycleNotificationHelperType = null,
-            };
-            options.StorageProvider = new StorageProviderOptions
-            {
-                AzureStorage = new AzureStorageOptions(),
             };
 
+            options.HubName = "DurableTaskHub";
+
             var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
+            var loggerFactory = new LoggerFactory();
             var extension = new DurableTaskExtension(
                 wrappedOptions,
-                new LoggerFactory(),
+                loggerFactory,
                 new SimpleNameResolver(),
-                new OrchestrationServiceFactory(wrappedOptions, new TestConnectionStringResolver()));
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver(), loggerFactory));
 
             var lifeCycleNotificationHelper = extension.LifeCycleNotificationHelper;
 
             Assert.NotNull(lifeCycleNotificationHelper);
             Assert.IsType<NullLifeCycleNotificationHelper>(lifeCycleNotificationHelper);
+        }
+
+        [Fact]
+        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
+        public async Task OrchestrationCustomHelperTypeDependencyInjection()
+        {
+            var options = new DurableTaskOptions
+            {
+                HubName = "DurableTaskHub",
+            };
+
+            var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
+            var loggerFactory = new LoggerFactory();
+            var extension = new DurableTaskExtension(
+                wrappedOptions,
+                loggerFactory,
+                new SimpleNameResolver(),
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver(), loggerFactory));
+
+            int callCount = 0;
+            Action<string> handler = eventName => { callCount++; };
+
+            using (JobHost host = TestHelpers.GetJobHostWithOptions(
+                this.loggerProvider,
+                wrappedOptions.Value,
+                lifeCycleNotificationHelper: new MockLifeCycleNotificationHelper(handler)))
+            {
+                await host.StartAsync();
+
+                var status = await host.StartOrchestratorAsync(nameof(TestOrchestrations.SayHelloInline), null, this.output);
+
+                await status.WaitForCompletionAsync(this.output);
+
+                await host.StopAsync();
+
+                Assert.Equal(2, callCount);
+            }
         }
 
         private static Mock<INameResolver> GetNameResolverMock((string Key, string Value)[] settings)
@@ -1353,15 +1328,26 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             return mock;
         }
 
-        public class TestLifeCycleNotificationHelper : ILifeCycleNotificationHelper
+        public class MockLifeCycleNotificationHelper : ILifeCycleNotificationHelper
         {
+            private readonly Action<string> handler;
+
+            public MockLifeCycleNotificationHelper(Action<string> handler)
+            {
+                this.handler = handler;
+            }
+
             public Task OrchestratorStartingAsync(string hubName, string functionName, string instanceId, bool isReplay)
             {
+                this.handler(nameof(this.OrchestratorStartingAsync));
+
                 return Task.CompletedTask;
             }
 
             public Task OrchestratorCompletedAsync(string hubName, string functionName, string instanceId, bool continuedAsNew, bool isReplay)
             {
+                this.handler(nameof(this.OrchestratorCompletedAsync));
+
                 return Task.CompletedTask;
             }
 

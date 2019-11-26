@@ -4,7 +4,7 @@
 using System;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 
-namespace Microsoft.Azure.WebJobs
+namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
     /// <summary>
     /// Provides functionality for application code implementing an entity operation.
@@ -35,12 +35,7 @@ namespace Microsoft.Azure.WebJobs
         /// </remarks>
         string OperationName { get; }
 
-        /// <summary>
-        /// Whether this entity is freshly constructed, i.e. did not exist prior to this operation being called.
-        /// </summary>
-        bool IsNewlyConstructed { get; }
-
-#if NETSTANDARD2_0
+#if !FUNCTIONS_V1
         /// <summary>
         /// Contains function invocation context to assist with dependency injection at Entity construction time.
         /// </summary>
@@ -48,7 +43,13 @@ namespace Microsoft.Azure.WebJobs
 #endif
 
         /// <summary>
+        /// Whether this entity has a state.
+        /// </summary>
+        bool HasState { get; }
+
+        /// <summary>
         /// Gets the current state of this entity, for reading and/or updating.
+        /// If this entity has no state yet, creates it.
         /// </summary>
         /// <typeparam name="TState">The JSON-serializable type of the entity state.</typeparam>
         /// <param name="initializer">Provides an initial value to use for the state, instead of default(<typeparamref name="TState"/>).</param>
@@ -61,6 +62,11 @@ namespace Microsoft.Azure.WebJobs
         /// </summary>
         /// <param name="state">The JSON-serializable state of the entity.</param>
         void SetState(object state);
+
+        /// <summary>
+        /// Deletes the state of this entity.
+        /// </summary>
+        void DeleteState();
 
         /// <summary>
         /// Gets the input for this operation, as a deserialized value.
@@ -91,16 +97,24 @@ namespace Microsoft.Azure.WebJobs
         void Return(object result);
 
         /// <summary>
-        /// Deletes this entity after this operation completes.
-        /// </summary>
-        void DestructOnExit();
-
-        /// <summary>
         /// Signals an entity to perform an operation, without waiting for a response. Any result or exception is ignored (fire and forget).
         /// </summary>
         /// <param name="entity">The target entity.</param>
         /// <param name="operationName">The name of the operation.</param>
         /// <param name="operationInput">The operation input.</param>
         void SignalEntity(EntityId entity, string operationName, object operationInput = null);
+
+        /// <summary>
+        /// Schedules a orchestration function named <paramref name="functionName"/> for execution./>.
+        /// Any result or exception is ignored (fire and forget).
+        /// </summary>
+        /// <param name="functionName">The name of the orchestrator function to call.</param>
+        /// <param name="input">the input to pass to the orchestrator function.</param>
+        /// <param name="instanceId">optionally, an instance id for the orchestration. By default, a random GUID is used.</param>
+        /// <exception cref="ArgumentException">
+        /// The specified function does not exist, is disabled, or is not an orchestrator function.
+        /// </exception>
+        /// <returns>The instance id of the new orchestration.</returns>
+        string StartNewOrchestration(string functionName, object input, string instanceId = null);
     }
 }

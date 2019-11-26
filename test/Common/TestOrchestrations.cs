@@ -6,8 +6,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
-using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 {
@@ -38,6 +39,26 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             string output = await ctx.CallActivityAsync<string>(nameof(TestActivities.Hello), input);
             Guid thirdGuid = ctx.NewGuid();
             return firstGuid != secondGuid && firstGuid != thirdGuid && secondGuid != thirdGuid;
+        }
+
+        public static async Task<string> AllOrchestratorActivityActions([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            EntityId input = ctx.GetInput<EntityId>();
+            var stringInput = input.ToString();
+            RetryOptions options = new RetryOptions(TimeSpan.FromSeconds(5), 3);
+
+            await ctx.CreateTimer(ctx.CurrentUtcDateTime, CancellationToken.None);
+            await ctx.CallActivityAsync<string>(nameof(TestActivities.Hello), stringInput);
+            await ctx.CallActivityWithRetryAsync<string>(nameof(TestActivities.Hello), options, stringInput);
+            await ctx.CallSubOrchestratorAsync<string>(nameof(TestOrchestrations.SayHelloInline), stringInput);
+            await ctx.CallSubOrchestratorWithRetryAsync<string>(nameof(TestOrchestrations.SayHelloWithActivity), options, stringInput);
+            ctx.StartNewOrchestration(nameof(TestOrchestrations.SayHelloWithActivityWithDeterministicGuid), stringInput);
+            ctx.SignalEntity(input, "count");
+
+            ctx.SetCustomStatus("AllAPICallsUsed");
+            await ctx.CallHttpAsync(null);
+
+            return "TestCompleted";
         }
 
         public static bool VerifyUniqueGuids([OrchestrationTrigger] IDurableOrchestrationContext ctx)
@@ -253,6 +274,34 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
 
             return eventValue;
+        }
+
+        public static async Task<bool> SimpleEventWithTimeoutSucceeds([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            TimeSpan timeout = ctx.GetInput<TimeSpan>();
+            await ctx.WaitForExternalEvent<string>("approval", timeout);
+            return true;
+        }
+
+        public static async Task<bool> SimpleActivityRetrySuccceds([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            (TimeSpan firstRetry, TimeSpan maxRetry) = ctx.GetInput<(TimeSpan, TimeSpan)>();
+
+            RetryOptions retry = new RetryOptions(firstRetry, 5)
+            {
+                MaxRetryInterval = maxRetry,
+            };
+
+            await ctx.CallActivityWithRetryAsync<Guid>(nameof(TestActivities.NewGuid), retry, null);
+
+            return true;
+        }
+
+        public static async Task<bool> SimpleTimerSucceeds([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            DateTime fireAt = ctx.GetInput<DateTime>();
+            await ctx.CreateTimer(fireAt, CancellationToken.None);
+            return true;
         }
 
         public static async Task ThrowOrchestrator([OrchestrationTrigger] IDurableOrchestrationContext ctx)
@@ -683,6 +732,40 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
         }
 
+        public static Task<string> FireAndForgetHelloOrchestration([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            var id = ctx.StartNewOrchestration(nameof(TestOrchestrations.SayHelloWithActivity), "Heloise");
+            return Task.FromResult(id);
+        }
+
+        public static async Task<string> LaunchOrchestrationFromEntity([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            var entityId = new EntityId("Launcher", ctx.NewGuid().ToString());
+
+            await ctx.CallEntityAsync(entityId, "launch", "hello");
+
+            while (true)
+            {
+                var orchestrationId = await ctx.CallEntityAsync<string>(entityId, "get");
+
+                if (orchestrationId != null)
+                {
+                    return orchestrationId;
+                }
+
+                await ctx.CreateTimer(DateTime.UtcNow + TimeSpan.FromSeconds(1), CancellationToken.None);
+            }
+        }
+
+        public static async Task DelayedSignal([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            var entityId = ctx.GetInput<EntityId>();
+
+            await ctx.CreateTimer(DateTime.UtcNow + TimeSpan.FromSeconds(.2), CancellationToken.None);
+
+            ctx.SignalEntity(entityId, "done");
+        }
+
         public static async Task<string> LargeEntity([OrchestrationTrigger] IDurableOrchestrationContext ctx)
         {
             var entityId = ctx.GetInput<EntityId>();
@@ -936,6 +1019,17 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             entityProxy.Delete();
 
             return result == 16;
+        }
+
+        public static async Task<string> ReplaySafeLogger_OneLogMessage([OrchestrationTrigger] IDurableOrchestrationContext ctx, ILogger log)
+        {
+            log = ctx.CreateReplaySafeLogger(log);
+            string input = ctx.GetInput<string>();
+
+            log.LogInformation("ReplaySafeLogger Test: About to say Hello");
+
+            string output = await ctx.CallActivityAsync<string>(nameof(TestActivities.Hello), input);
+            return output;
         }
     }
 }

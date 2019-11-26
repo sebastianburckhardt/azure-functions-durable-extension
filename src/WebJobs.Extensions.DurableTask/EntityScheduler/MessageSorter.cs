@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
@@ -98,8 +97,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// </summary>
         public IEnumerable<RequestMessage> ReceiveInOrder(RequestMessage message, TimeSpan reorderWindow)
         {
-            // messages sent from clients are not participating in the sorting.
-            if (reorderWindow.Ticks == 0 || message.ParentInstanceId == null)
+            // messages sent from clients and forwarded lock messages are not participating in the sorting.
+            if (reorderWindow.Ticks == 0 || message.ParentInstanceId == null || message.Position > 0)
             {
                 // Just pass the message through.
                 yield return message;

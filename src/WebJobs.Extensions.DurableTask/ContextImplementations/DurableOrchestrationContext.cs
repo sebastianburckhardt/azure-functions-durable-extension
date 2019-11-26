@@ -13,7 +13,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.Exceptions;
-using Microsoft.Azure.WebJobs.Extensions.DurableTask.Options;
 using Microsoft.Extensions.Primitives;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -28,15 +27,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         DurableOrchestrationContextBase // for v1 legacy compatibility.
 #pragma warning restore 618
     {
-        private const string DefaultVersion = "";
-
-        private const int MaxTimerDurationInDays = 6;
+        public const string DefaultVersion = "";
 
         private readonly Dictionary<string, Stack> pendingExternalEvents =
             new Dictionary<string, Stack>(StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<string, Queue<string>> bufferedExternalEvents =
             new Dictionary<string, Queue<string>>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly DurabilityProvider durabilityProvider;
+        private readonly int maxActionCount;
+
+        private int actionCount;
 
         private string serializedOutput;
         private string serializedCustomStatus;
@@ -49,9 +51,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         private MessageSorter messageSorter;
 
-        internal DurableOrchestrationContext(DurableTaskExtension config, string functionName)
+        internal DurableOrchestrationContext(DurableTaskExtension config, DurabilityProvider durabilityProvider, string functionName)
             : base(config, functionName)
         {
+            this.durabilityProvider = durabilityProvider;
+            this.actionCount = 0;
+            this.maxActionCount = config.Options.MaxOrchestrationActions;
         }
 
         internal string ParentInstanceId { get; set; }
@@ -243,6 +248,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     fireAt = this.InnerContext.CurrentUtcDateTime.AddMilliseconds(this.Config.Options.HttpSettings.DefaultAsyncRequestSleepTimeMilliseconds);
                 }
 
+                this.IncrementActionsOrThrowException();
                 await this.InnerContext.CreateTimer(fireAt, CancellationToken.None);
 
                 DurableHttpRequest durableAsyncHttpRequest = this.CreateHttpRequestMessageCopy(req, durableHttpResponse.Headers["Location"]);
@@ -284,13 +290,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             this.ThrowIfInvalidAccess();
 
-            // This check can be removed once the storage provider supports extended timers.
-            // https://github.com/Azure/azure-functions-durable-extension/issues/14
-            if (fireAt.Subtract(this.InnerContext.CurrentUtcDateTime) > TimeSpan.FromDays(MaxTimerDurationInDays))
+            if (!this.durabilityProvider.ValidateDelayTime(fireAt.Subtract(this.InnerContext.CurrentUtcDateTime), out string errorMessage))
             {
-                throw new ArgumentException($"Timer durations must not exceed {MaxTimerDurationInDays} days.", nameof(fireAt));
+                throw new ArgumentException(errorMessage, nameof(fireAt));
             }
 
+            this.IncrementActionsOrThrowException();
             Task<T> timerTask = this.InnerContext.CreateTimer(fireAt, state, cancelToken);
 
             this.Config.TraceHelper.FunctionListening(
@@ -384,9 +389,10 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         string IDurableOrchestrationContext.StartNewOrchestration(string functionName, object input, string instanceId)
         {
             this.ThrowIfInvalidAccess();
-            var alreadyCompletedTask = this.CallDurableTaskFunctionAsync<string>(functionName, FunctionType.Orchestrator, true, instanceId, null, null, input);
+            var actualInstanceId = string.IsNullOrEmpty(instanceId) ? this.NewGuid().ToString() : instanceId;
+            var alreadyCompletedTask = this.CallDurableTaskFunctionAsync<string>(functionName, FunctionType.Orchestrator, true, actualInstanceId, null, null, input);
             System.Diagnostics.Debug.Assert(alreadyCompletedTask.IsCompleted, "starting orchestrations is synchronous");
-            return alreadyCompletedTask.Result;
+            return actualInstanceId;
         }
 
         internal async Task<TResult> CallDurableTaskFunctionAsync<TResult>(
@@ -399,6 +405,19 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             object input)
         {
             this.ThrowIfInvalidAccess();
+
+            if (retryOptions != null)
+            {
+                if (!this.durabilityProvider.ValidateDelayTime(retryOptions.MaxRetryInterval, out string errorMessage))
+                {
+                    throw new ArgumentException(errorMessage, nameof(retryOptions.MaxRetryInterval));
+                }
+
+                if (!this.durabilityProvider.ValidateDelayTime(retryOptions.FirstRetryInterval, out errorMessage))
+                {
+                    throw new ArgumentException(errorMessage, nameof(retryOptions.FirstRetryInterval));
+                }
+            }
 
             // TODO: Support for versioning
             string version = DefaultVersion;
@@ -417,10 +436,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     System.Diagnostics.Debug.Assert(!oneWay, "The oneWay parameter should not be used for activity functions.");
                     if (retryOptions == null)
                     {
+                        this.IncrementActionsOrThrowException();
                         callTask = this.InnerContext.ScheduleTask<TResult>(functionName, version, input);
                     }
                     else
                     {
+                        this.IncrementActionsOrThrowException();
                         callTask = this.InnerContext.ScheduleWithRetry<TResult>(
                             functionName,
                             version,
@@ -448,7 +469,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                     if (oneWay)
                     {
-                        throw new NotImplementedException(); // TODO
+                        this.IncrementActionsOrThrowException();
+                        var dummyTask = this.InnerContext.CreateSubOrchestrationInstance<TResult>(
+                                functionName,
+                                version,
+                                instanceId,
+                                input,
+                                new Dictionary<string, string>() { { OrchestrationTags.FireAndForget, "" } });
+
+                        System.Diagnostics.Debug.Assert(dummyTask.IsCompleted, "task should be fire-and-forget");
                     }
                     else
                     {
@@ -459,6 +488,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                         if (retryOptions == null)
                         {
+                            this.IncrementActionsOrThrowException();
                             callTask = this.InnerContext.CreateSubOrchestrationInstance<TResult>(
                                 functionName,
                                 version,
@@ -467,6 +497,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                         }
                         else
                         {
+                            this.IncrementActionsOrThrowException();
                             callTask = this.InnerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
                                 functionName,
                                 version,
@@ -596,7 +627,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             operationId,
                             operationName,
                             input: "(replayed)",
-                            output: "(replayed)",
+                            exception: "(replayed)",
                             duration: 0,
                             isReplay: true);
                     }
@@ -807,6 +838,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         private Task<T> WaitForExternalEvent<T>(string name, TimeSpan timeout, Action<TaskCompletionSource<T>> timeoutAction)
         {
+            if (!this.durabilityProvider.ValidateDelayTime(timeout, out string errorMessage))
+            {
+                throw new ArgumentException(errorMessage, nameof(timeout));
+            }
+
             var tcs = new TaskCompletionSource<T>();
             var cts = new CancellationTokenSource();
 
@@ -994,7 +1030,20 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     eventContent);
             }
 
+            this.IncrementActionsOrThrowException();
             this.InnerContext.SendEvent(target, eventName, eventContent);
+        }
+
+        private void IncrementActionsOrThrowException()
+        {
+            if (this.actionCount >= this.maxActionCount)
+            {
+                throw new InvalidOperationException("Maximum amount of orchestration actions (" + this.maxActionCount + ") has been reached. This value can be configured in host.json file as MaxOrchestrationActions.");
+            }
+            else
+            {
+                this.actionCount++;
+            }
         }
 
         private Guid NewGuid()

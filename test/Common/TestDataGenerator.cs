@@ -9,9 +9,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
     public class TestDataGenerator
     {
         private static readonly object[] BoolOptions = new object[] { true, false };
-        private static readonly object[] FullFeaturedStorageProviders = new object[] { TestHelpers.AzureStorageProviderType, TestHelpers.EventSourcedProviderType };
         private static readonly object[] ExtendedSessionsStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
+        private static readonly object[] HistoryStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
+#if !FUNCTIONS_V1
+        private static readonly object[] FullFeaturedStorageProviders = new object[] { TestHelpers.AzureStorageProviderType, TestHelpers.EventSourcedProviderType };
         private static readonly object[] AllStorageProviders = new object[] { TestHelpers.AzureStorageProviderType, TestHelpers.RedisProviderType, TestHelpers.EventSourcedProviderType };
+#else
+        private static readonly object[] FullFeaturedStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
+        private static readonly object[] AllStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
+#endif
 
         public static IEnumerable<object[]> GetFullFeaturedStorageProviderOptions()
         {
@@ -26,6 +32,28 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             foreach (object boolOption in BoolOptions)
             {
                 foreach (object storageProviderOption in FullFeaturedStorageProviders)
+                {
+                    if (!(bool)boolOption || ExtendedSessionsStorageProviders.Contains(storageProviderOption))
+                    {
+                        yield return new object[] { boolOption, storageProviderOption };
+                    }
+                }
+            }
+        }
+
+        public static IEnumerable<object[]> GetHistoryStorageProviderOptions()
+        {
+            foreach (object storageProviderOption in HistoryStorageProviders)
+            {
+                yield return new object[] { storageProviderOption };
+            }
+        }
+
+        public static IEnumerable<object[]> GetExtendedSessionAndHistoryStorageProviderOptions()
+        {
+            foreach (object boolOption in BoolOptions)
+            {
+                foreach (object storageProviderOption in HistoryStorageProviders)
                 {
                     if (!(bool)boolOption || ExtendedSessionsStorageProviders.Contains(storageProviderOption))
                     {

@@ -2,9 +2,9 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
-using Microsoft.Azure.WebJobs.Extensions.DurableTask.Options;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
@@ -14,7 +14,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     public class DurableTaskOptions
     {
         private string hubName;
-        private bool isDefaultHubName = false;
+
+        private bool? isDefaultHubName = null;
 
         /// <summary>
         /// Settings used for Durable HTTP functionality.
@@ -49,13 +50,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             set
             {
                 this.hubName = value;
+                if (!this.isDefaultHubName.HasValue)
+                {
+                    this.isDefaultHubName = false;
+                }
             }
         }
 
         /// <summary>
-        /// The section of configuration related to storage providers.
+        /// The section of configuration related to storage providers. If using Azure Storage provider, the schema should match
+        /// <see cref="AzureStorageOptions"/>.
         /// </summary>
-        public StorageProviderOptions StorageProvider { get; set; }
+        public IDictionary<string, object> StorageProvider { get; set; } = new Dictionary<string, object>();
 
         /// <summary>
         /// The section of configuration related to tracing.
@@ -129,15 +135,19 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public int ExtendedSessionIdleTimeoutInSeconds { get; set; } = 30;
 
         /// <summary>
+        /// Gets or sets the maximum number of orchestration actions. The default value is 100,000.
+        /// </summary>
+        public int MaxOrchestrationActions { get; set; } = 100000;
+
+        /// <summary>
+        ///  States that will override an existing orchestrator when attempting to start a new orchestrator with the same instance Id.
+        /// </summary>
+        public OverridableStates OverridableExistingInstanceStates { get; set; } = OverridableStates.NonRunningStates;
+
+        /// <summary>
         /// Gets or sets the time window within which entity messages get deduplicated and reordered.
         /// </summary>
         public int EntityMessageReorderWindowInMinutes { get; set; } = 30;
-
-        /// <summary>
-        /// Gets or sets the type name of a custom to use for handling lifecycle notification events.
-        /// </summary>
-        /// <value>Assembly qualified class name that implements <see cref="ILifeCycleNotificationHelper">ILifeCycleNotificationHelper</see>.</value>
-        public string CustomLifeCycleNotificationHelperType { get; set; }
 
         // Used for mocking the lifecycle notification helper.
         internal HttpMessageHandler NotificationHandler { get; set; }
@@ -148,9 +158,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             sb.AppendLine("Initializing extension with the following settings:");
             sb.Append(nameof(this.HubName)).Append(":").Append(this.HubName).Append(", ");
 
-            sb.Append(nameof(this.StorageProvider)).Append(": { ");
-            this.StorageProvider.AddToDebugString(sb);
-            sb.Append(" }, ");
+            this.AppendStorageProviderValuesToDebugString(sb);
 
             sb.Append(nameof(this.MaxConcurrentActivityFunctions)).Append(": ").Append(this.MaxConcurrentActivityFunctions).Append(", ");
             sb.Append(nameof(this.MaxConcurrentOrchestratorFunctions)).Append(": ").Append(this.MaxConcurrentOrchestratorFunctions).Append(", ");
@@ -178,13 +186,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return sb.ToString();
         }
 
-        /// <summary>
-        /// A helper method to help retrieve the connection string name for the configured storage provider.
-        /// </summary>
-        /// <returns>The connection string name for the configured storage provider.</returns>
-        public string GetConnectionStringName()
+        private void AppendStorageProviderValuesToDebugString(StringBuilder sb)
         {
-            return this.StorageProvider.GetConfiguredProvider().ConnectionStringName;
+            sb.Append(nameof(this.StorageProvider)).Append(": { ");
+            foreach (var value in this.StorageProvider)
+            {
+                sb.Append(value.Key).Append(": ").Append(value.Value).Append(", ");
+            }
+
+            sb.Append(" }, ");
         }
 
         internal void Validate()
@@ -194,21 +204,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 throw new InvalidOperationException($"A non-empty {nameof(this.HubName)} configuration is required.");
             }
 
-            if (IsInNonProductionSlot() && this.isDefaultHubName)
+            if (IsInNonProductionSlot() && this.IsDefaultHubName())
             {
                 throw new InvalidOperationException("Task Hub name must be specified in host.json when using slots. See documentation on Task Hubs for " +
                     "information on how to set this: https://docs.microsoft.com/azure/azure-functions/durable/durable-functions-task-hubs");
             }
-
-            if (this.StorageProvider == null)
-            {
-                this.StorageProvider = new StorageProviderOptions();
-            }
-
-            this.StorageProvider.Validate();
-
-            // Each storage provider may have its own limitations for task hub names due to provider naming restrictions
-            this.StorageProvider.GetConfiguredProvider().ValidateHubName(this.HubName);
 
             this.Notifications.Validate();
 
@@ -221,6 +221,16 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 throw new InvalidOperationException($"{nameof(this.MaxConcurrentOrchestratorFunctions)} must be a non-negative integer value.");
             }
+        }
+
+        internal bool IsDefaultHubName()
+        {
+            return this.isDefaultHubName ?? this.hubName == null;
+        }
+
+        internal void SetDefaultHubName(string defaultHubName)
+        {
+            this.hubName = defaultHubName;
         }
 
         private static bool IsInNonProductionSlot()
