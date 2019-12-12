@@ -35,7 +35,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
             else if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
             {
-                this.options.HubName = sanitizedHubName;
+                this.options.SetDefaultHubName(sanitizedHubName);
             }
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
