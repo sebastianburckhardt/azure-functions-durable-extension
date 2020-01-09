@@ -161,6 +161,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal EndToEndTraceHelper TraceHelper { get; private set; }
 
+        internal string GetBackendInfo()
+        {
+            return this.defaultDurabilityProvider.GetBackendInfo();
+        }
+
         /// <summary>
         /// Internal initialization call from the WebJobs host.
         /// </summary>

@@ -61,6 +61,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// <inheritdoc />
         string IDurableOrchestrationClient.TaskHubName => this.TaskHubName;
 
+        public override string ToString()
+        {
+            return $"DurableClient[backend={this.config.GetBackendInfo()}]";
+        }
+
         /// <inheritdoc />
         HttpResponseMessage IDurableOrchestrationClient.CreateCheckStatusResponse(HttpRequestMessage request, string instanceId, bool returnInternalServerErrorOnFailure)
         {

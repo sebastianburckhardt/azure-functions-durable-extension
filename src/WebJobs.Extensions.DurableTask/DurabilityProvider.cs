@@ -69,6 +69,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// <inheritdoc/>
         public int MaxConcurrentTaskActivityWorkItems => this.GetOrchestrationService().MaxConcurrentTaskActivityWorkItems;
 
+        internal string GetBackendInfo()
+        {
+            return this.GetOrchestrationService().ToString();
+        }
+
         private IOrchestrationService GetOrchestrationService()
         {
             if (this.innerService == null)
