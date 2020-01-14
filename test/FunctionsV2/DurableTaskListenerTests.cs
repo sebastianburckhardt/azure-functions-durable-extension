@@ -55,11 +55,10 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             options.NotificationUrl = new Uri("https://sampleurl.net");
             var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
             var connectionStringResolver = new TestConnectionStringResolver();
-            var loggerFactory = new LoggerFactory();
-            var serviceFactory = new AzureStorageDurabilityProviderFactory(wrappedOptions, connectionStringResolver, loggerFactory);
+            var serviceFactory = new AzureStorageDurabilityProviderFactory(wrappedOptions, connectionStringResolver);
             return new DurableTaskExtension(
                 wrappedOptions,
-                loggerFactory,
+                new LoggerFactory(),
                 TestHelpers.GetTestNameResolver(),
                 serviceFactory,
                 new DurableHttpMessageHandlerFactory());

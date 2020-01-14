@@ -3,6 +3,8 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
@@ -11,8 +13,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.AzureStorage;
 using DurableTask.Core;
-using DurableTask.Core.Common;
-using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Middleware;
 using Microsoft.Azure.WebJobs.Description;
@@ -89,17 +89,22 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// <param name="orchestrationServiceFactory">The factory used to create orchestration service based on the configured storage provider.</param>
         /// <param name="durableHttpMessageHandlerFactory">The HTTP message handler that handles HTTP requests and HTTP responses.</param>
         /// <param name="lifeCycleNotificationHelper">The lifecycle notification helper used for custom orchestration tracking.</param>
+        /// <param name="messageSerializerSettingsFactory">The factory used to create <see cref="JsonSerializerSettings"/> for message settings.</param>
+        /// <param name="errorSerializerSettingsFactory">The factory used to create <see cref="JsonSerializerSettings"/> for error settings.</param>
         public DurableTaskExtension(
             IOptions<DurableTaskOptions> options,
             ILoggerFactory loggerFactory,
             INameResolver nameResolver,
             IDurabilityProviderFactory orchestrationServiceFactory,
             IDurableHttpMessageHandlerFactory durableHttpMessageHandlerFactory = null,
-            ILifeCycleNotificationHelper lifeCycleNotificationHelper = null)
+            ILifeCycleNotificationHelper lifeCycleNotificationHelper = null,
+            IMessageSerializerSettingsFactory messageSerializerSettingsFactory = null,
+            IErrorSerializerSettingsFactory errorSerializerSettingsFactory = null)
         {
             // Options will be null in Functions v1 runtime - populated later.
             this.Options = options?.Value ?? new DurableTaskOptions();
             this.nameResolver = nameResolver ?? throw new ArgumentNullException(nameof(nameResolver));
+            this.ResolveAppSettingOptions();
 
             if (loggerFactory == null)
             {
@@ -122,6 +127,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             DurableHttpClientFactory durableHttpClientFactory = new DurableHttpClientFactory();
             this.durableHttpClient = durableHttpClientFactory.GetClient(durableHttpMessageHandlerFactory);
+
+            if (messageSerializerSettingsFactory == null)
+            {
+                messageSerializerSettingsFactory = new MessageSerializerSettingsFactory();
+            }
+
+            if (errorSerializerSettingsFactory == null)
+            {
+                errorSerializerSettingsFactory = new ErrorSerializerSettingsFactory();
+            }
+
+            this.DataConverter = new MessagePayloadDataConverter(messageSerializerSettingsFactory, errorSerializerSettingsFactory);
         }
 
 #if FUNCTIONS_V1
@@ -161,6 +178,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal EndToEndTraceHelper TraceHelper { get; private set; }
 
+        internal MessagePayloadDataConverter DataConverter { get; private set; }
+
+        internal string GetBackendInfo()
+        {
+            return this.defaultDurabilityProvider.GetBackendInfo();
+        }
+
         /// <summary>
         /// Internal initialization call from the WebJobs host.
         /// </summary>
@@ -174,12 +198,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             if (!this.isOptionsConfigured)
             {
                 this.InitializeForFunctionsV1(context);
-            }
-
-            if (this.nameResolver.TryResolveWholeString(this.Options.HubName, out string taskHubName))
-            {
-                // use the resolved task hub name
-                this.Options.HubName = taskHubName;
             }
 
             // Throw if any of the configured options are invalid
@@ -229,16 +247,36 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.taskHubWorker.AddOrchestrationDispatcherMiddleware(this.OrchestrationMiddleware);
         }
 
+        private void ResolveAppSettingOptions()
+        {
+            if (this.Options == null)
+            {
+                throw new InvalidOperationException($"{nameof(this.Options)} must be set before resolving app settings.");
+            }
+
+            if (this.nameResolver == null)
+            {
+                throw new InvalidOperationException($"{nameof(this.nameResolver)} must be set before resolving app settings.");
+            }
+
+            if (this.nameResolver.TryResolveWholeString(this.Options.HubName, out string taskHubName))
+            {
+                // use the resolved task hub name
+                this.Options.HubName = taskHubName;
+            }
+        }
+
         private void InitializeForFunctionsV1(ExtensionConfigContext context)
         {
 #if FUNCTIONS_V1
             context.ApplyConfig(this.Options, "DurableTask");
+            this.nameResolver = context.Config.NameResolver;
+            this.ResolveAppSettingOptions();
             ILogger logger = context.Config.LoggerFactory.CreateLogger(LoggerCategoryName);
             this.TraceHelper = new EndToEndTraceHelper(logger, this.Options.Tracing.TraceReplayEvents);
             this.connectionStringResolver = new WebJobsConnectionStringProvider();
-            this.durabilityProviderFactory = new AzureStorageDurabilityProviderFactory(new OptionsWrapper<DurableTaskOptions>(this.Options), this.connectionStringResolver, context.Config.LoggerFactory);
+            this.durabilityProviderFactory = new AzureStorageDurabilityProviderFactory(new OptionsWrapper<DurableTaskOptions>(this.Options), this.connectionStringResolver);
             this.defaultDurabilityProvider = this.durabilityProviderFactory.GetDurabilityProvider();
-            this.nameResolver = context.Config.NameResolver;
             this.LifeCycleNotificationHelper = this.CreateLifeCycleNotificationHelper();
             this.HttpApiHandler = new HttpApiHandler(this, logger);
 #endif
@@ -246,12 +284,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         private void TraceConfigurationSettings()
         {
-            this.TraceHelper.ExtensionInformationalEvent(
-                this.Options.HubName,
-                instanceId: string.Empty,
-                functionName: string.Empty,
-                message: $"Initializing extension with the following settings: {this.Options.GetDebugString()}",
-                writeToUserLogs: true);
+            this.Options.TraceConfiguration(this.TraceHelper);
         }
 
         private ILifeCycleNotificationHelper CreateLifeCycleNotificationHelper()
@@ -466,13 +499,23 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                             entityShim.NumberEventsToReceive++;
 
-                            if (eventRaisedEvent.Name == "op")
+                            if (EntityMessageEventNames.IsRequestMessage(eventRaisedEvent.Name))
                             {
                                 // we are receiving an operation request or a lock request
-                                var requestMessage = JsonConvert.DeserializeObject<RequestMessage>(eventRaisedEvent.Input);
+                                var requestMessage = this.DataConverter.Deserialize<RequestMessage>(eventRaisedEvent.Input);
 
-                                // run this through the message sorter to help with reordering and duplicate filtering
-                                var deliverNow = entityContext.State.MessageSorter.ReceiveInOrder(requestMessage, entityContext.EntityMessageReorderWindow);
+                                IEnumerable<RequestMessage> deliverNow;
+
+                                if (requestMessage.ScheduledTime.HasValue)
+                                {
+                                    // messages with a scheduled time are always delivered immediately
+                                    deliverNow = new RequestMessage[] { requestMessage };
+                                }
+                                else
+                                {
+                                    // run this through the message sorter to help with reordering and duplicate filtering
+                                    deliverNow = entityContext.State.MessageSorter.ReceiveInOrder(requestMessage, entityContext.EntityMessageReorderWindow);
+                                }
 
                                 foreach (var message in deliverNow)
                                 {
@@ -491,7 +534,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             else
                             {
                                 // we are receiving a lock release
-                                var message = JsonConvert.DeserializeObject<ReleaseMessage>(eventRaisedEvent.Input);
+                                var message = this.DataConverter.Deserialize<ReleaseMessage>(eventRaisedEvent.Input);
 
                                 if (entityContext.State.LockedBy == message.ParentInstanceId)
                                 {
@@ -681,15 +724,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
             else
             {
+                var info = new RegisteredFunctionInfo(executor, isOutOfProc: false);
+                this.knownActivities[activityFunction] = info;
+
                 this.TraceHelper.ExtensionInformationalEvent(
                     this.Options.HubName,
                     instanceId: string.Empty,
                     functionName: activityFunction.Name,
-                    message: $"Registering activity function named {activityFunction}.",
+                    message: $"Registered activity function named {activityFunction}.",
                     writeToUserLogs: false);
-
-                var info = new RegisteredFunctionInfo(executor, isOutOfProc: false);
-                this.knownActivities[activityFunction] = info;
             }
         }
 
@@ -734,7 +777,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         internal void DeregisterEntity(FunctionName entityFunction)
         {
             RegisteredFunctionInfo existing;
-            if (this.knownOrchestrators.TryGetValue(entityFunction, out existing) && !existing.IsDeregistered)
+            if (this.knownEntities.TryGetValue(entityFunction, out existing) && !existing.IsDeregistered)
             {
                 existing.IsDeregistered = true;
 
@@ -835,8 +878,16 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             message: "Starting task hub worker",
                             writeToUserLogs: true);
 
+                        Stopwatch sw = Stopwatch.StartNew();
                         await this.defaultDurabilityProvider.CreateIfNotExistsAsync();
                         await this.taskHubWorker.StartAsync();
+
+                        this.TraceHelper.ExtensionInformationalEvent(
+                            this.Options.HubName,
+                            instanceId: string.Empty,
+                            functionName: string.Empty,
+                            message: $"Task hub worker started. Latency: {sw.Elapsed}",
+                            writeToUserLogs: true);
 
                         // Enable flowing exception information from activities
                         // to the parent orchestration code.
@@ -855,19 +906,32 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             using (await this.taskHubLock.AcquireAsync())
             {
+                // Wait to shut down the task hub worker until all function listeners have been shut down.
                 if (this.isTaskHubWorkerStarted &&
-                    this.knownOrchestrators.Values.Count(info => !info.IsDeregistered) == 0 &&
-                    this.knownActivities.Values.Count(info => !info.IsDeregistered) == 0)
+                    !this.knownOrchestrators.Values.Any(info => info.HasActiveListener) &&
+                    !this.knownActivities.Values.Any(info => info.HasActiveListener) &&
+                    !this.knownEntities.Values.Any(info => info.HasActiveListener))
                 {
+                    bool isGracefulStop = this.Options.UseGracefulShutdown;
+
                     this.TraceHelper.ExtensionInformationalEvent(
                         this.Options.HubName,
                         instanceId: string.Empty,
                         functionName: string.Empty,
-                        message: "Stopping task hub worker",
+                        message: $"Stopping task hub worker. IsGracefulStop: {isGracefulStop}",
                         writeToUserLogs: true);
 
-                    await this.taskHubWorker.StopAsync(isForced: true);
+                    Stopwatch sw = Stopwatch.StartNew();
+                    await this.taskHubWorker.StopAsync(isForced: !isGracefulStop);
                     this.isTaskHubWorkerStarted = false;
+
+                    this.TraceHelper.ExtensionInformationalEvent(
+                        this.Options.HubName,
+                        instanceId: string.Empty,
+                        functionName: string.Empty,
+                        message: $"Task hub worker stopped. IsGracefulStop: {isGracefulStop}. Latency: {sw.Elapsed}",
+                        writeToUserLogs: true);
+
                     return true;
                 }
             }

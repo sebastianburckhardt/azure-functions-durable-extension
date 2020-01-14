@@ -11,6 +11,7 @@ using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
+using Newtonsoft.Json.Linq;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -47,6 +48,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             int httpAsyncSleepTime = 500,
             IDurableHttpMessageHandlerFactory durableHttpMessageHandler = null,
             ILifeCycleNotificationHelper lifeCycleNotificationHelper = null,
+            IMessageSerializerSettingsFactory serializerSettings = null,
             DurableTaskOptions options = null)
         {
             switch (storageProviderType)
@@ -66,31 +68,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             {
                 options = new DurableTaskOptions();
             }
-
-            options.HubName = GetTaskHubNameFromTestName(testName, enableExtendedSessions);
-            options.Tracing = new TraceOptions()
-            {
-                TraceInputsAndOutputs = true,
-                TraceReplayEvents = traceReplayEvents,
-            };
-            options.Notifications = new NotificationOptions()
-            {
-                EventGrid = new EventGridNotificationOptions()
-                {
-                    KeySettingName = eventGridKeySettingName,
-                    TopicEndpoint = eventGridTopicEndpoint,
-                    PublishEventTypes = eventGridPublishEventTypes,
-                },
-            };
-            options.HttpSettings = new HttpOptions()
-            {
-                DefaultAsyncRequestSleepTimeMilliseconds = httpAsyncSleepTime,
-            };
-            options.NotificationUrl = notificationUrl;
-            options.ExtendedSessionsEnabled = enableExtendedSessions;
-            options.MaxConcurrentOrchestratorFunctions = 200;
-            options.MaxConcurrentActivityFunctions = 200;
-            options.NotificationHandler = eventGridNotificationHandler;
 
             options.HubName = GetTaskHubNameFromTestName(testName, enableExtendedSessions);
             options.Tracing = new TraceOptions()
@@ -162,7 +139,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 storageProviderType,
                 nameResolver,
                 durableHttpMessageHandler,
-                lifeCycleNotificationHelper);
+                lifeCycleNotificationHelper,
+                serializerSettings);
         }
 
         public static JobHost GetJobHostWithOptions(
@@ -171,8 +149,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             string storageProviderType = AzureStorageProviderType,
             INameResolver nameResolver = null,
             IDurableHttpMessageHandlerFactory durableHttpMessageHandler = null,
-            ILifeCycleNotificationHelper lifeCycleNotificationHelper = null)
+            ILifeCycleNotificationHelper lifeCycleNotificationHelper = null,
+            IMessageSerializerSettingsFactory serializerSettings = null)
         {
+            if (serializerSettings == null)
+            {
+                serializerSettings = new MessageSerializerSettingsFactory();
+            }
+
             var optionsWrapper = new OptionsWrapper<DurableTaskOptions>(durableTaskOptions);
             var testNameResolver = new TestNameResolver(nameResolver);
             if (durableHttpMessageHandler == null)
@@ -180,7 +164,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 durableHttpMessageHandler = new DurableHttpMessageHandlerFactory();
             }
 
-            return PlatformSpecificHelpers.CreateJobHost(optionsWrapper, storageProviderType, loggerProvider, testNameResolver, durableHttpMessageHandler, lifeCycleNotificationHelper);
+            return PlatformSpecificHelpers.CreateJobHost(optionsWrapper, storageProviderType, loggerProvider, testNameResolver, durableHttpMessageHandler, lifeCycleNotificationHelper, serializerSettings);
         }
 
         public static DurableTaskOptions GetDurableTaskOptionsForStorageProvider(string storageProvider)

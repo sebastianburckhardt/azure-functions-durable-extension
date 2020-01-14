@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Core;
-using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
@@ -68,6 +68,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         /// <inheritdoc/>
         public int MaxConcurrentTaskActivityWorkItems => this.GetOrchestrationService().MaxConcurrentTaskActivityWorkItems;
+
+        internal string GetBackendInfo()
+        {
+            return this.GetOrchestrationService().ToString();
+        }
 
         private IOrchestrationService GetOrchestrationService()
         {
@@ -299,8 +304,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// Retrieves the state for a serialized entity.
         /// </summary>
         /// <param name="entityId">Entity id to fetch state for.</param>
+        /// <param name="serializerSettings">JsonSerializerSettings for custom deserialization.</param>
         /// <returns>State for the entity.</returns>
-        public virtual Task<string> RetrieveSerializedEntityState(EntityId entityId)
+        public virtual Task<string> RetrieveSerializedEntityState(EntityId entityId, JsonSerializerSettings serializerSettings)
         {
             throw this.GetNotImplementedException(nameof(this.RetrieveSerializedEntityState));
         }

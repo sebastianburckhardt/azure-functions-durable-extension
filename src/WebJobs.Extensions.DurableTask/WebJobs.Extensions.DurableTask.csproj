@@ -5,8 +5,8 @@
     <AssemblyName>Microsoft.Azure.WebJobs.Extensions.DurableTask</AssemblyName>
     <RootNamespace>Microsoft.Azure.WebJobs.Extensions.DurableTask</RootNamespace>
     <MajorVersion>2</MajorVersion>
-    <MinorVersion>0</MinorVersion>
-    <PatchVersion>0</PatchVersion>
+    <MinorVersion>1</MinorVersion>
+    <PatchVersion>1</PatchVersion>
     <!-- Note the "-dev" suffix is needed to avoid "error NU5104: A stable release of a package should not have a prerelease dependency" -->
     <Version>$(MajorVersion).$(MinorVersion).$(PatchVersion)-dev</Version>
     <FileVersion>$(MajorVersion).$(MinorVersion).$(PatchVersion)</FileVersion>
@@ -19,6 +19,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>embedded</DebugType>
     <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>NU5125</NoWarn>
   </PropertyGroup>
 
   <!-- 
@@ -62,8 +63,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-*" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.*" PrivateAssets="All" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.*" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.Azure.Services.AppAuthentication" Version="1.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -72,12 +74,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.1.5-tag38" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.EventSourced" Version="2.1.5-tag38" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Redis" Version="2.1.5-tag38" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Emulator" Version="2.1.5-tag38" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.AzureStorage" Version="2.1.5-tag38" />
-    <PackageReference Include="Microsoft.Azure.Services.AppAuthentication" Version="1.0.3" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.2.1-tag4" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.EventSourced" Version="2.2.1-tag4" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Redis" Version="2.2.1-tag4" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Emulator" Version="2.2.1-tag4" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.AzureStorage" Version="2.2.1-tag4" />
   </ItemGroup>
 
   <!-- NuGet Publishing Metadata -->

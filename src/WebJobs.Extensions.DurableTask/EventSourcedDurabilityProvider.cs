@@ -30,7 +30,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public override string ConnectionName => this.connectionStringName;
 
         /// <inheritdoc/>
-        public async override Task<string> RetrieveSerializedEntityState(EntityId entityId)
+        public async override Task<string> RetrieveSerializedEntityState(EntityId entityId, JsonSerializerSettings serializerSettings)
         {
             var instanceId = EntityId.GetSchedulerIdFromEntityId(entityId);
             IList<OrchestrationState> stateList = await this.serviceClient.GetOrchestrationStateAsync(instanceId, false);
@@ -40,7 +40,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 && state.OrchestrationInstance != null
                 && state.Input != null)
             {
-                var schedulerState = JsonConvert.DeserializeObject<SchedulerState>(state.Input, MessagePayloadDataConverter.MessageSettings);
+                var schedulerState = JsonConvert.DeserializeObject<SchedulerState>(state.Input, serializerSettings);
 
                 if (schedulerState.EntityExists)
                 {

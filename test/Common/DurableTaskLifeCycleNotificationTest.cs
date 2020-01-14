@@ -1226,12 +1226,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
             var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
             var connectionStringResolver = new TestConnectionStringResolver();
-            var loggerFactory = new LoggerFactory();
             var extension = new DurableTaskExtension(
                 wrappedOptions,
-                loggerFactory,
+                new LoggerFactory(),
                 mockNameResolver.Object,
-                new AzureStorageDurabilityProviderFactory(wrappedOptions, connectionStringResolver, loggerFactory));
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, connectionStringResolver));
 
             var eventGridLifeCycleNotification = (EventGridLifeCycleNotificationHelper)extension.LifeCycleNotificationHelper;
 
@@ -1267,12 +1266,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             options.HubName = "DurableTaskHub";
 
             var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
-            var loggerFactory = new LoggerFactory();
             var extension = new DurableTaskExtension(
                 wrappedOptions,
-                loggerFactory,
+                new LoggerFactory(),
                 new SimpleNameResolver(),
-                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver(), loggerFactory));
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver()));
 
             var lifeCycleNotificationHelper = extension.LifeCycleNotificationHelper;
 
@@ -1290,12 +1288,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             };
 
             var wrappedOptions = new OptionsWrapper<DurableTaskOptions>(options);
-            var loggerFactory = new LoggerFactory();
             var extension = new DurableTaskExtension(
                 wrappedOptions,
-                loggerFactory,
+                new LoggerFactory(),
                 new SimpleNameResolver(),
-                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver(), loggerFactory));
+                new AzureStorageDurabilityProviderFactory(wrappedOptions, new TestConnectionStringResolver()));
 
             int callCount = 0;
             Action<string> handler = eventName => { callCount++; };

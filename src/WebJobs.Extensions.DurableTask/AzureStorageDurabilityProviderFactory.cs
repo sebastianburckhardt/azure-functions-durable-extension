@@ -3,8 +3,6 @@
 
 using System;
 using DurableTask.AzureStorage;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 
@@ -15,40 +13,25 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private readonly DurableTaskOptions options;
         private readonly AzureStorageOptions azureStorageOptions;
         private readonly IConnectionStringResolver connectionStringResolver;
-        private readonly AzureStorageOrchestrationServiceSettings defaultSettings;
         private readonly string defaultConnectionName;
         private AzureStorageDurabilityProvider defaultStorageProvider;
 
+        // Must wait to get settings until we have validated taskhub name.
+        private bool hasValidatedOptions;
+        private AzureStorageOrchestrationServiceSettings defaultSettings;
+
         public AzureStorageDurabilityProviderFactory(
             IOptions<DurableTaskOptions> options,
-            IConnectionStringResolver connectionStringResolver,
-            ILoggerFactory loggerFactory)
+            IConnectionStringResolver connectionStringResolver)
         {
             this.options = options.Value;
             this.azureStorageOptions = new AzureStorageOptions();
             JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.azureStorageOptions);
 
             this.azureStorageOptions.Validate();
-            if (!this.options.IsDefaultHubName())
-            {
-                this.azureStorageOptions.ValidateHubName(this.options.HubName);
-            }
-            else if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
-            {
-                this.options.SetDefaultHubName(sanitizedHubName);
-            }
 
-            // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
-            var providerFactoryName = nameof(AzureStorageDurabilityProviderFactory);
-            ILogger logger = loggerFactory != null
-                    ? loggerFactory.CreateLogger(providerFactoryName)
-                    : throw new ArgumentNullException(nameof(loggerFactory));
-            var traceHelper = new EndToEndTraceHelper(logger, false);
-            traceHelper.ExtensionWarningEvent(this.options.HubName, "n/a", "n/a", $"{providerFactoryName} instantiated");
-
-            this.connectionStringResolver = connectionStringResolver;
+            this.connectionStringResolver = connectionStringResolver ?? throw new ArgumentNullException(nameof(connectionStringResolver));
             this.defaultConnectionName = this.azureStorageOptions.ConnectionStringName ?? ConnectionStringNames.Storage;
-            this.defaultSettings = this.GetAzureStorageOrchestrationServiceSettings();
         }
 
         internal string GetDefaultStorageConnectionString()
@@ -56,8 +39,30 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return this.connectionStringResolver.Resolve(this.defaultConnectionName);
         }
 
+        // This method should not be called before the app settings are resolved into the options.
+        // Because of this, we wait to validate the options until right before building a durability provider, rather
+        // than in the Factory constructor.
+        private void EnsureInitialized()
+        {
+            if (!this.hasValidatedOptions)
+            {
+                if (!this.options.IsDefaultHubName())
+                {
+                    this.azureStorageOptions.ValidateHubName(this.options.HubName);
+                }
+                else if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
+                {
+                    this.options.SetDefaultHubName(sanitizedHubName);
+                }
+
+                this.defaultSettings = this.GetAzureStorageOrchestrationServiceSettings();
+                this.hasValidatedOptions = true;
+            }
+        }
+
         public DurabilityProvider GetDurabilityProvider()
         {
+            this.EnsureInitialized();
             if (this.defaultStorageProvider == null)
             {
                 var defaultService = new AzureStorageOrchestrationService(this.defaultSettings);
@@ -69,6 +74,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         public DurabilityProvider GetDurabilityProvider(DurableClientAttribute attribute)
         {
+            this.EnsureInitialized();
             return this.GetAzureStorageStorageProvider(attribute);
         }
 
@@ -82,7 +88,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 string.Equals(this.defaultSettings.StorageConnectionString, settings.StorageConnectionString, StringComparison.OrdinalIgnoreCase))
             {
                 // It's important that clients use the same AzureStorageOrchestrationService instance
-                // as the host when possible to ensure any send operations can be picked up
+                // as the host when possible to ensure we any send operations can be picked up
                 // immediately instead of waiting for the next queue polling interval.
                 innerClient = this.defaultStorageProvider;
             }
