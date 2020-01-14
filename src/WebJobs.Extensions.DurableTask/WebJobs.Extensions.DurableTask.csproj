@@ -74,11 +74,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.2.1-tag4" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.EventSourced" Version="2.2.1-tag4" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Redis" Version="2.2.1-tag4" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Emulator" Version="2.2.1-tag4" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.AzureStorage" Version="2.2.1-tag4" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.2.1-tag7" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.EventSourced" Version="2.2.1-tag7" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Redis" Version="2.2.1-tag7" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Emulator" Version="2.2.1-tag7" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.AzureStorage" Version="2.2.1-tag7" />
   </ItemGroup>
 
   <!-- NuGet Publishing Metadata -->
