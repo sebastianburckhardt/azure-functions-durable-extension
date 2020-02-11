@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 using System;
 using System.Text;
+using Microsoft.WindowsAzure.Storage;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
@@ -10,6 +11,10 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     /// </summary>
     public class EventSourcedStorageOptions
     {
+        // 45 alphanumeric characters gives us a buffer in our table/queue/blob container names.
+        private const int MaxTaskHubNameSize = 45;
+        private const int MinTaskHubNameSize = 3;
+
         /// <summary>
         /// Gets or sets the name of the Azure Storage connection string used to manage the underlying Azure Storage resources.
         /// </summary>
@@ -46,6 +51,31 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 throw new InvalidOperationException($"{nameof(this.EventHubsConnectionStringName)} must be populated to use the EventSourced storage provider");
             }
+        }
+
+        /// <summary>
+        /// Throws an exception if the provided hub name violates any naming conventions for the storage provider.
+        /// </summary>
+        public void ValidateHubName(string hubName)
+        {
+            try
+            {
+                NameValidator.ValidateContainerName(hubName.ToLowerInvariant());
+            }
+            catch (ArgumentException e)
+            {
+                throw new ArgumentException(GetTaskHubErrorString(hubName), e);
+            }
+
+            if (hubName.Length > 50)
+            {
+                throw new ArgumentException(GetTaskHubErrorString(hubName));
+            }
+        }
+
+        private static string GetTaskHubErrorString(string hubName)
+        {
+            return $"Task hub name '{hubName}' should contain only alphanumeric characters and have length between {MinTaskHubNameSize} and {MaxTaskHubNameSize}.";
         }
     }
 }

@@ -42,6 +42,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 this.options.SetDefaultHubName(sanitizedHubName);
             }
 
+            if (runningInTestEnvironment)
+            {
+                // use a single task hub name for all tests to allow reuse between tests with same settings
+                this.options.HubName = "test-taskhub";
+            }
+
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
             var providerFactoryName = nameof(EventSourcedDurabilityProviderFactory);
             ILogger logger = loggerFactory != null
@@ -58,7 +64,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 {
                     // We simply use the cached orchestration service, which is still running.
                     this.entry = cachedTestEntry;
-                    cachedTestEntry.TaskHubName = this.options.HubName;
                     return;
                 }
 
@@ -73,13 +78,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 Settings = settings,
                 DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings), this.defaultConnectionStringName),
-                TaskHubName = this.options.HubName,
             };
 
             if (runningInTestEnvironment)
             {
                 if (cachedTestEntry == null)
                 {
+                    // delete the test taskhub before the first test is run
                     ((IOrchestrationService)this.entry.DurabilityProvider).DeleteAsync().Wait();
                 }
 
@@ -94,6 +99,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public DurabilityProvider GetDurabilityProvider(DurableClientAttribute attribute)
         {
             // logger.LogWarning($"{nameof(EventSourcedDurabilityProviderFactory)}.{nameof(this.GetDurabilityProvider)}");
+
+            this.eventSourcedStorageOptions.ValidateHubName(this.options.HubName);
 
             string connectionName = attribute.ConnectionName ?? this.defaultConnectionStringName;
             var settings = this.GetEventSourcedOrchestrationServiceSettings(connectionName, attribute.TaskHub);
@@ -111,11 +118,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             string connectionStringName = null,
             string taskHubNameOverride = null)
         {
-            if (!string.IsNullOrEmpty(taskHubNameOverride) && !string.Equals(taskHubNameOverride, this.entry.TaskHubName))
-            {
-                throw new InvalidOperationException("EventSourced client does not support using multiple task hubs");
-            }
-
             string resolvedStorageConnectionString = this.connectionStringResolver.Resolve(connectionStringName ?? this.eventSourcedStorageOptions.ConnectionStringName);
             if (string.IsNullOrEmpty(resolvedStorageConnectionString))
             {
@@ -130,6 +132,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             var settings = new EventSourcedOrchestrationServiceSettings()
             {
+                TaskHubName = taskHubNameOverride ?? this.options.HubName,
                 StorageConnectionString = resolvedStorageConnectionString,
                 EventHubsConnectionString = resolvedEventHubsConnectionString,
                 MaxConcurrentTaskActivityWorkItems = this.options.MaxConcurrentActivityFunctions,
@@ -145,8 +148,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public EventSourcedOrchestrationServiceSettings Settings { get; set; }
 
             public EventSourcedDurabilityProvider DurabilityProvider { get; set; }
-
-            public string TaskHubName { get; set; }
         }
     }
 }

@@ -50,5 +50,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             return null;
         }
+
+        /// <inheritdoc/>
+        public async override Task<IList<OrchestrationState>> GetOrchestrationStateWithInputsAsync(string instanceId, bool showInput = true)
+        {
+            var result = new List<OrchestrationState>();
+            var state = await this.serviceClient.GetOrchestrationStateAsync(instanceId, null);
+            if (state != null)
+            {
+                result.Add(state);
+            }
+
+            return result;
+        }
     }
 }
