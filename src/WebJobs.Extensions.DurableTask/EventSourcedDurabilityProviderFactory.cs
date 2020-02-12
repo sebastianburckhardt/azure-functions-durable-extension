@@ -121,13 +121,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             string resolvedStorageConnectionString = this.connectionStringResolver.Resolve(connectionStringName ?? this.eventSourcedStorageOptions.ConnectionStringName);
             if (string.IsNullOrEmpty(resolvedStorageConnectionString))
             {
-                throw new InvalidOperationException("Unable to find an Azure Storage connection string to use for this binding.");
+                throw new InvalidOperationException($"Unable to resolve configuration variable ${this.eventSourcedStorageOptions.EventHubsConnectionStringName} for the Azure storage connection string.");
             }
 
             string resolvedEventHubsConnectionString = this.connectionStringResolver.Resolve(this.eventSourcedStorageOptions.EventHubsConnectionStringName);
             if (string.IsNullOrEmpty(resolvedEventHubsConnectionString))
             {
-                throw new InvalidOperationException("Unable to find an Event Hubs connection string to use for this binding.");
+                throw new InvalidOperationException($"Unable to resolve configuration variable ${this.eventSourcedStorageOptions.EventHubsConnectionStringName} for the EventHubs connection string.");
             }
 
             var settings = new EventSourcedOrchestrationServiceSettings()
