@@ -22,11 +22,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private readonly EventSourcedStorageOptions eventSourcedStorageOptions;
         private readonly IConnectionStringResolver connectionStringResolver;
         private readonly string defaultConnectionStringName;
+        private readonly ILoggerFactory loggerFactory;
 
         public EventSourcedDurabilityProviderFactory(
             IOptions<DurableTaskOptions> options,
             IConnectionStringResolver connectionStringResolver,
-            ILoggerFactory loggerFactory = null)
+            ILoggerFactory loggerFactory)
         {
             this.options = options.Value;
             this.eventSourcedStorageOptions = new EventSourcedStorageOptions();
@@ -50,9 +51,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
             var providerFactoryName = nameof(EventSourcedDurabilityProviderFactory);
-            ILogger logger = loggerFactory != null
-                    ? loggerFactory.CreateLogger(providerFactoryName)
-                    : throw new ArgumentNullException(nameof(loggerFactory));
+            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+            ILogger logger = loggerFactory.CreateLogger(providerFactoryName);
             var traceHelper = new EndToEndTraceHelper(logger, false);
             traceHelper.ExtensionWarningEvent(this.options.HubName, "n/a", "n/a", $"{providerFactoryName} instantiated");
 
@@ -77,7 +77,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.entry = new Entry()
             {
                 Settings = settings,
-                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings), this.defaultConnectionStringName),
+                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, loggerFactory), this.defaultConnectionStringName),
             };
 
             if (runningInTestEnvironment)
@@ -111,7 +111,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return (string.Equals(this.options.HubName, this.options.HubName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(this.entry.Settings.StorageConnectionString, settings.StorageConnectionString, StringComparison.OrdinalIgnoreCase))
                 ? this.entry.DurabilityProvider
-                : new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings), connectionName);
+                : new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, this.loggerFactory), connectionName);
         }
 
         internal EventSourcedOrchestrationServiceSettings GetEventSourcedOrchestrationServiceSettings(
