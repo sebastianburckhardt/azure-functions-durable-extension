@@ -54,7 +54,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
             ILogger logger = loggerFactory.CreateLogger(providerFactoryName);
             var traceHelper = new EndToEndTraceHelper(logger, false);
-            traceHelper.ExtensionWarningEvent(this.options.HubName, "n/a", "n/a", $"{providerFactoryName} instantiated");
+            traceHelper.ExtensionWarningEvent(this.options.HubName, string.Empty, string.Empty, $"{providerFactoryName} instantiated");
 
             var settings = this.GetEventSourcedOrchestrationServiceSettings();
 
