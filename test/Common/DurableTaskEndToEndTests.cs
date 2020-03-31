@@ -425,7 +425,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -476,7 +476,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -557,7 +557,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
 
             // Assert log entry count
-            if (this.useTestLogger)
+            if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
             {
                 var logger = this.loggerProvider.CreatedLoggers.Single(l => l.Category == TestHelpers.LogCategory);
                 var logMessages = logger.LogMessages.Where(
@@ -654,7 +654,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -886,7 +886,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -942,7 +942,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -988,7 +988,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1034,7 +1034,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1245,7 +1245,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1292,7 +1292,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1544,7 +1544,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.UnhandledOrchesterationExceptionWithRetry_AssertLogMessageSequence(
                         this.output,
@@ -1632,7 +1632,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1730,7 +1730,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1880,7 +1880,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -1943,7 +1943,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -2023,7 +2023,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
@@ -2338,7 +2338,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 await host.StopAsync();
 
-                if (this.useTestLogger)
+                if (this.useTestLogger && storageProvider == TestHelpers.AzureStorageProviderType)
                 {
                     TestHelpers.AssertLogMessageSequence(
                         this.output,
