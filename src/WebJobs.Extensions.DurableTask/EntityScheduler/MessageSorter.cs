@@ -160,14 +160,31 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             if (this.ReceivedFromInstance == null)
             {
-                this.ReceivedFromInstance = new Dictionary<string, ReceiveBuffer>(StringComparer.OrdinalIgnoreCase)
+                this.ReceivedFromInstance = new Dictionary<string, ReceiveBuffer>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            if (!this.ReceivedFromInstance.TryGetValue(message.ParentInstanceId, out receiveBuffer))
+            {
+                this.ReceivedFromInstance[message.ParentInstanceId] = receiveBuffer = new ReceiveBuffer()
                 {
-                    { message.ParentInstanceId,  receiveBuffer = new ReceiveBuffer() },
+                    ExecutionId = message.ParentExecutionId,
                 };
             }
-            else if (!this.ReceivedFromInstance.TryGetValue(message.ParentInstanceId, out receiveBuffer))
+            else if (receiveBuffer.ExecutionId != message.ParentExecutionId)
             {
-                this.ReceivedFromInstance[message.ParentInstanceId] = receiveBuffer = new ReceiveBuffer();
+                // this message is from a new execution; release all buffered messages and start over
+                if (receiveBuffer.Buffered != null)
+                {
+                    foreach (var kvp in receiveBuffer.Buffered)
+                    {
+                        yield return kvp.Value;
+                    }
+
+                    receiveBuffer.Buffered.Clear();
+                }
+
+                receiveBuffer.Last = DateTime.MinValue;
+                receiveBuffer.ExecutionId = message.ParentExecutionId;
             }
 
             if (message.Timestamp <= receiveBuffer.Last)
@@ -232,6 +249,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         internal class ReceiveBuffer
         {
             public DateTime Last { get; set; }// last message delivered, or DateTime.Min if none
+
+            [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string ExecutionId { get; set; } // execution id of last message, if any
 
             [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
             public SortedDictionary<DateTime, RequestMessage> Buffered { get; set; }

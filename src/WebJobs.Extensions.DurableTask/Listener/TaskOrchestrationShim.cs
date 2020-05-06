@@ -18,12 +18,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     {
         private readonly DurableOrchestrationContext context;
         private readonly OutOfProcOrchestrationShim outOfProcShim;
-        private readonly MessagePayloadDataConverter dataConverter;
+        private readonly DurableTaskExtension config;
 
         public TaskOrchestrationShim(DurableTaskExtension config, DurabilityProvider durabilityProvider, string name)
             : base(config)
         {
-            this.dataConverter = config.DataConverter;
+            this.config = config;
             this.context = new DurableOrchestrationContext(config, durabilityProvider, name);
             this.outOfProcShim = new OutOfProcOrchestrationShim(this.context);
         }
@@ -48,9 +48,24 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         public override async Task<string> Execute(OrchestrationContext innerContext, string serializedInput)
         {
+            // Supress "Variable is assigned but its value is never used" in Functions V1
+#pragma warning disable CS0219
+            OrchestrationRuntimeStatus status; // for reporting the status of the orchestration on App Insights
+#pragma warning restore CS0219
+
             if (this.FunctionInvocationCallback == null)
             {
                 throw new InvalidOperationException($"The {nameof(this.FunctionInvocationCallback)} has not been assigned!");
+            }
+
+            if (!this.config.MessageDataConverter.IsDefault)
+            {
+                innerContext.MessageDataConverter = this.config.MessageDataConverter;
+            }
+
+            if (!this.config.ErrorDataConverter.IsDefault)
+            {
+                innerContext.ErrorDataConverter = this.config.ErrorDataConverter;
             }
 
             this.context.InnerContext = innerContext;
@@ -63,6 +78,17 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 this.Config.GetIntputOutputTrace(serializedInput),
                 FunctionType.Orchestrator,
                 this.context.IsReplaying);
+            status = OrchestrationRuntimeStatus.Running;
+#if !FUNCTIONS_V1
+            // On a replay, the orchestrator will either go into a 'Completed'
+            // state or a 'Failed' state. We want to avoid tagging them as
+            // 'Running' while replaying because this could result in
+            // Application Insights reporting the wrong status.
+            if (!innerContext.IsReplaying)
+            {
+                DurableTaskExtension.TagActivityWithOrchestrationStatus(status, this.context.InstanceId);
+            }
+#endif
 
             var orchestratorInfo = this.Config.GetOrchestratorInfo(new FunctionName(this.context.Name));
 
@@ -100,6 +126,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     exceptionDetails,
                     FunctionType.Orchestrator,
                     this.context.IsReplaying);
+                status = OrchestrationRuntimeStatus.Failed;
 
                 if (!this.context.IsReplaying)
                 {
@@ -113,10 +140,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                 var orchestrationException = new OrchestrationFailureException(
                     $"Orchestrator function '{this.context.Name}' failed: {e.Message}",
-                    Utils.SerializeCause(e, this.dataConverter.ErrorConverter));
+                    Utils.SerializeCause(e, this.config.ErrorDataConverter));
 
                 this.context.OrchestrationException = ExceptionDispatchInfo.Capture(orchestrationException);
-
+#if !FUNCTIONS_V1
+                DurableTaskExtension.TagActivityWithOrchestrationStatus(status, this.context.InstanceId);
+#endif
                 throw orchestrationException;
             }
             finally
@@ -163,6 +192,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 this.context.ContinuedAsNew,
                 FunctionType.Orchestrator,
                 this.context.IsReplaying);
+            status = OrchestrationRuntimeStatus.Completed;
+
             if (!this.context.IsReplaying)
             {
                 this.context.AddDeferredTask(() => this.Config.LifeCycleNotificationHelper.OrchestratorCompletedAsync(
@@ -172,7 +203,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     this.context.ContinuedAsNew,
                     this.context.IsReplaying));
             }
-
+#if !FUNCTIONS_V1
+            DurableTaskExtension.TagActivityWithOrchestrationStatus(status, this.context.InstanceId);
+#endif
             return serializedOutput;
         }
     }
