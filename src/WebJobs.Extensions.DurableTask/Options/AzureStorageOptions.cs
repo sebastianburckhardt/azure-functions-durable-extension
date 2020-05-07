@@ -148,7 +148,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return $"Task hub name '{hubName}' should contain only alphanumeric characters, start with a letter, and have length between {MinTaskHubNameSize} and {MaxTaskHubNameSize}.";
         }
 
-        internal bool IsSanitizedHubName(string hubName, out string sanitizedHubName)
+        internal static bool IsSanitizedHubName(string hubName, out string sanitizedHubName)
         {
             // Only alphanumeric characters are valid.
             var validHubNameCharacters = hubName.ToCharArray().Where(char.IsLetterOrDigit);

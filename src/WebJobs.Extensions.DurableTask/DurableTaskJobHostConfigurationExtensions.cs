@@ -94,6 +94,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return builder;
         }
 
+        /// <summary>
+        /// Override the AzureStorageDurabilityProvider specification that was done in AddDurableTask.
+        /// </summary>
+        /// <param name="services">The <see cref="IServiceCollection"/> to configure, usually from the Functions app's FunctionsStartup.</param>
+        /// <returns>Returns the provided <see cref="IServiceCollection"/>.</returns>
+        public static IServiceCollection UseEventSourcedDurabilityProvider(this IServiceCollection services)
+            => services.AddSingleton<IDurabilityProviderFactory, EventSourcedDurabilityProviderFactory>();
+
 #else
         /// <summary>
         /// Enable running durable orchestrations implemented as functions.

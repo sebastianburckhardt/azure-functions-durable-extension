@@ -50,7 +50,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 {
                     this.azureStorageOptions.ValidateHubName(this.options.HubName);
                 }
-                else if (!this.azureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
+                else if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
                 {
                     this.options.SetDefaultHubName(sanitizedHubName);
                 }

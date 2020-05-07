@@ -23,6 +23,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         public const string AzureStorageProviderType = "azure_storage";
         public const string EmulatorProviderType = "emulator";
         public const string RedisProviderType = "redis";
+        public const string EventSourcedProviderType = "eventsourced";
 
         public const string LogCategory = "Host.Triggers.DurableTask";
         public const string EmptyStorageProviderType = "empty";
@@ -58,6 +59,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 #if !FUNCTIONS_V1
                 case RedisProviderType:
                 case EmulatorProviderType:
+                case EventSourcedProviderType:
 #endif
                     break;
                 default:
@@ -105,6 +107,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 {
                     options.StorageProvider["maxQueuePollingInterval"] = maxQueuePollingInterval.Value;
                 }
+            }
+            else if (string.Equals(storageProviderType, EventSourcedProviderType))
+            {
+                options.StorageProvider[nameof(EventSourcedStorageOptions.ConnectionStringName)] = "Storage";
+                options.StorageProvider[nameof(EventSourcedStorageOptions.EventHubsConnectionStringName)] = "EventHubsConnection";
+                options.StorageProvider[nameof(EventSourcedStorageOptions.RunningInTestEnvironment)] = true;
+
+                // can turn off the reorder window since this is already guaranteed by EVentHubs backend
+                options.EntityMessageReorderWindowInMinutes = 0;
             }
 
             if (eventGridRetryCount.HasValue)

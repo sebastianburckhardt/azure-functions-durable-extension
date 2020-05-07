@@ -217,6 +217,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             return new MessagePayloadDataConverter(errorSerializerSettingsFactory.CreateJsonSerializerSettings(), isDefault);
         }
 
+        internal string GetBackendInfo()
+        {
+            return this.defaultDurabilityProvider.GetBackendInfo();
+        }
+
         /// <summary>
         /// Internal initialization call from the WebJobs host.
         /// </summary>
