@@ -101,6 +101,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             return builder;
         }
 
+        private static IWebJobsBuilder AddEventSourcedDurableTask(this IWebJobsBuilder builder)
+        {
+            builder.Services.AddSingleton<IDurabilityProviderFactory, EventSourcedDurabilityProviderFactory>();
+            return builder;
+        }
+
         private class FunctionsV2HostWrapper : ITestHost
         {
             private readonly IHost innerHost;
