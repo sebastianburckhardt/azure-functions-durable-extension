@@ -50,11 +50,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
-            var providerFactoryName = nameof(EventSourcedDurabilityProviderFactory);
             this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-            ILogger logger = loggerFactory.CreateLogger(providerFactoryName);
+            var providerFactoryName = nameof(EventSourcedDurabilityProviderFactory);
+            ILogger logger = this.loggerFactory.CreateLogger(providerFactoryName);
             var traceHelper = new EndToEndTraceHelper(logger, false);
             traceHelper.ExtensionWarningEvent(this.options.HubName, string.Empty, string.Empty, $"{providerFactoryName} instantiated");
+
+            // capture trace events generated in the backend and generate an ETW event
+            // this is a temporary workaround until the original ETW events are being captured by the hosted infrastructure
+            this.loggerFactory = new LoggerFactoryWrapper(loggerFactory, this.options.HubName);
 
             var settings = this.GetEventSourcedOrchestrationServiceSettings();
 
@@ -77,7 +81,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.entry = new Entry()
             {
                 Settings = settings,
-                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, loggerFactory), this.defaultConnectionStringName),
+                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, this.loggerFactory), this.defaultConnectionStringName),
             };
 
             if (runningInTestEnvironment)
@@ -105,9 +109,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             string connectionName = attribute.ConnectionName ?? this.defaultConnectionStringName;
             var settings = this.GetEventSourcedOrchestrationServiceSettings(connectionName, attribute.TaskHub);
 
-            // It's important that clients use the same EventSourcedOrchestrationService instance
-            // as the host when possible to ensure any send operations can be picked up
-            // immediately instead of waiting for the next queue polling interval.
+            // By design, we are only running one instance of the service on each host machine, for each task hub
             return (string.Equals(this.options.HubName, this.options.HubName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(this.entry.Settings.StorageConnectionString, settings.StorageConnectionString, StringComparison.OrdinalIgnoreCase))
                 ? this.entry.DurabilityProvider
@@ -148,6 +150,73 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public EventSourcedOrchestrationServiceSettings Settings { get; set; }
 
             public EventSourcedDurabilityProvider DurabilityProvider { get; set; }
+        }
+
+        private class LoggerFactoryWrapper : ILoggerFactory
+        {
+            private readonly ILoggerFactory loggerFactory;
+            private readonly string hubName;
+
+            public LoggerFactoryWrapper(ILoggerFactory loggerFactory, string hubName)
+            {
+                this.hubName = hubName;
+                this.loggerFactory = loggerFactory;
+            }
+
+            public void AddProvider(ILoggerProvider provider)
+            {
+                this.loggerFactory.AddProvider(provider);
+            }
+
+            public ILogger CreateLogger(string categoryName)
+            {
+                var logger = this.loggerFactory.CreateLogger(categoryName);
+                return new LoggerWrapper(logger, categoryName, this.hubName);
+            }
+
+            public void Dispose()
+            {
+                this.loggerFactory.Dispose();
+            }
+        }
+
+        private class LoggerWrapper : ILogger
+        {
+            private static readonly string ExtensionVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(typeof(DurableTaskExtension).Assembly.Location).FileVersion;
+            private readonly ILogger logger;
+            private readonly string prefix;
+            private readonly string hubName;
+
+            public LoggerWrapper(ILogger logger, string category, string hubName)
+            {
+                this.logger = logger;
+                this.prefix = $"[{category}]";
+                this.hubName = hubName;
+            }
+
+            public IDisposable BeginScope<TState>(TState state)
+            {
+                return this.logger.BeginScope(state);
+            }
+
+            public bool IsEnabled(LogLevel logLevel)
+            {
+                return this.logger.IsEnabled(logLevel);
+            }
+
+            public void Log<TState>(LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+            {
+                this.logger.Log(logLevel, eventId, state, exception, formatter);
+
+                EtwEventSource.Instance.ExtensionInformationalEvent(
+                this.hubName,
+                EndToEndTraceHelper.LocalAppName,
+                EndToEndTraceHelper.LocalSlotName,
+                string.Empty,
+                string.Empty,
+                $"{logLevel,-11} {this.prefix} {formatter(state, exception)}",
+                ExtensionVersion);
+            }
         }
     }
 }
