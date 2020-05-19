@@ -206,16 +206,22 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             public void Log<TState>(LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
             {
-                this.logger.Log(logLevel, eventId, state, exception, formatter);
+                if (this.logger.IsEnabled(logLevel))
+                {
+                    this.logger.Log(logLevel, eventId, state, exception, formatter);
 
-                EtwEventSource.Instance.ExtensionInformationalEvent(
-                this.hubName,
-                EndToEndTraceHelper.LocalAppName,
-                EndToEndTraceHelper.LocalSlotName,
-                string.Empty,
-                string.Empty,
-                $"{logLevel,-11} {this.prefix} {formatter(state, exception)}",
-                ExtensionVersion);
+                    if (EventSourcedDurabilityProvider.GenerateEtwExtensionEventsForILogger)
+                    {
+                        EtwEventSource.Instance.ExtensionInformationalEvent(
+                        this.hubName,
+                        EndToEndTraceHelper.LocalAppName,
+                        EndToEndTraceHelper.LocalSlotName,
+                        string.Empty,
+                        string.Empty,
+                        $"{logLevel,-11} {this.prefix} {formatter(state, exception)}",
+                        ExtensionVersion);
+                    }
+                }
             }
         }
     }
