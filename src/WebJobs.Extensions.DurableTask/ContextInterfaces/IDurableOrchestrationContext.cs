@@ -263,8 +263,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// </summary>
         /// <param name="ownedLocks">The collection of owned locks.</param>
         /// <remarks>
-        /// Note that the collection of owned locks can be empty even if the context is locked. This happens
-        /// if an orchestration calls a suborchestration without lending any locks.
+        /// Note that the collection of owned locks can be empty even if the context is locked. 
         /// </remarks>
         /// <returns><c>true</c> if the context already holds some locks.</returns>
         bool IsLocked(out IReadOnlyList<EntityId> ownedLocks);

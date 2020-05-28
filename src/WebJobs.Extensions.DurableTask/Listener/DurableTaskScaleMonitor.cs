@@ -11,8 +11,8 @@ using System.Text;
 using System.Threading.Tasks;
 using DurableTask.AzureStorage.Monitoring;
 using Dynamitey.DynamicObjects;
+using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Azure.WebJobs.Host.Scale;
-using Microsoft.WindowsAzure.Storage;
 using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
