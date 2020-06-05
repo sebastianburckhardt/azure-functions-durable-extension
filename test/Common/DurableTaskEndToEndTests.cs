@@ -224,7 +224,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         /// </summary>
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [MemberData(nameof(TestDataGenerator.GetAllSupportedExtendedSessionWithStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        [MemberData(nameof(TestDataGenerator.GetBooleanAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
         public async Task HelloWorldOrchestration_Activity(bool extendedSessions, string storageProvider)
         {
             await this.HelloWorldOrchestration_Activity_Main_Logic(nameof(this.HelloWorldOrchestration_Activity), extendedSessions, storageProvider);

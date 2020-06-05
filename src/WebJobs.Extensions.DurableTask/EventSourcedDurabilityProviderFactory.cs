@@ -19,34 +19,59 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private static Entry cachedTestEntry;
 
         private readonly DurableTaskOptions options;
-        private readonly EventSourcedStorageOptions eventSourcedStorageOptions;
+        private readonly EventSourcedOrchestrationServiceSettings eventSourcedSettings;
         private readonly IConnectionStringResolver connectionStringResolver;
-        private readonly string defaultConnectionStringName;
         private readonly ILoggerFactory loggerFactory;
+        private readonly bool runningInTestEnvironment;
+
+        public const string RunningInTestEnvironmentSetting = "RunningInTestEnvironment";
 
         public EventSourcedDurabilityProviderFactory(
             IOptions<DurableTaskOptions> options,
             IConnectionStringResolver connectionStringResolver,
             ILoggerFactory loggerFactory)
         {
+            // for debugging
+            System.Threading.Thread.Sleep(5000);
+
             this.options = options.Value;
-            this.eventSourcedStorageOptions = new EventSourcedStorageOptions();
-            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedStorageOptions);
-
-            this.eventSourcedStorageOptions.Validate();
-            var runningInTestEnvironment = this.eventSourcedStorageOptions.RunningInTestEnvironment;
             this.connectionStringResolver = connectionStringResolver;
-            this.defaultConnectionStringName = this.eventSourcedStorageOptions.ConnectionStringName ?? ConnectionStringNames.Storage;
+            this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
+            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedSettings);
 
+            this.runningInTestEnvironment = this.options.StorageProvider.TryGetValue(RunningInTestEnvironmentSetting, out object objValue)
+                && objValue is string stringValue && bool.TryParse(stringValue, out bool boolValue) && boolValue;
+
+            // resolve any indirection in the specification of the two connection strings
+            this.eventSourcedSettings.StorageConnectionString = this.ResolveIndirection(
+                this.eventSourcedSettings.StorageConnectionString,
+                nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString));
+            this.eventSourcedSettings.EventHubsConnectionString = this.ResolveIndirection(
+                this.eventSourcedSettings.EventHubsConnectionString,
+                nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString));
+
+            if (this.runningInTestEnvironment)
+            {
+                // use a single task hub name for all tests to allow reuse between tests with same settings
+                this.options.HubName = "test-taskhub";
+            }
+            else if (!string.IsNullOrEmpty(this.eventSourcedSettings.TaskHubName))
+            {
+                // use the taskhubname specified in the settings
+                this.options.HubName = this.eventSourcedSettings.TaskHubName;
+            }
+
+            // if the taskhubname is not valid, replace it with a default
             if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
             {
                 this.options.SetDefaultHubName(sanitizedHubName);
             }
 
-            if (runningInTestEnvironment)
+            // make sure the settings we pass on have the fields correctly set
+            this.eventSourcedSettings.TaskHubName = this.options.HubName;
+            if (this.runningInTestEnvironment)
             {
-                // use a single task hub name for all tests to allow reuse between tests with same settings
-                this.options.HubName = "test-taskhub";
+                this.eventSourcedSettings.KeepServiceRunning = true;
             }
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
@@ -60,11 +85,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             // this is a temporary workaround until the original ETW events are being captured by the hosted infrastructure
             this.loggerFactory = new LoggerFactoryWrapper(loggerFactory, this.options.HubName);
 
-            var settings = this.GetEventSourcedOrchestrationServiceSettings();
-
-            if (runningInTestEnvironment && cachedTestEntry != null)
+            if (this.runningInTestEnvironment && cachedTestEntry != null)
             {
-                if (settings.Equals(cachedTestEntry.Settings))
+                if (this.eventSourcedSettings.Equals(cachedTestEntry.Settings))
                 {
                     // We simply use the cached orchestration service, which is still running.
                     this.entry = cachedTestEntry;
@@ -80,11 +103,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             this.entry = new Entry()
             {
-                Settings = settings,
-                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, this.loggerFactory), this.defaultConnectionStringName),
+                Settings = this.eventSourcedSettings,
+                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(this.eventSourcedSettings, this.loggerFactory)),
             };
 
-            if (runningInTestEnvironment)
+            if (this.runningInTestEnvironment)
             {
                 if (cachedTestEntry == null)
                 {
@@ -96,53 +119,54 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
         }
 
+        private string ResolveIndirection(string value, string propertyName)
+        {
+            string envName;
+            string setting;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                envName = propertyName;
+            }
+            else if (value.StartsWith("$"))
+            {
+                envName = value.Substring(1);
+            }
+            else if (value.StartsWith("%") && value.EndsWith("%"))
+            {
+                envName = value.Substring(1, value.Length - 2);
+            }
+            else
+            {
+                envName = null;
+            }
+
+            if (envName != null)
+            {
+                setting = this.connectionStringResolver.Resolve(envName);
+            }
+            else
+            {
+                setting = value;
+            }
+
+            if (string.IsNullOrEmpty(setting))
+            {
+                throw new InvalidOperationException($"Could not resolve '{envName}' for required property '{propertyName}' in EventSourced storage provider settings.");
+            }
+            else
+            {
+                return setting;
+            }
+        }
+
         internal string GetDefaultStorageConnectionString() => this.entry.Settings.StorageConnectionString;
 
         public DurabilityProvider GetDurabilityProvider() => this.entry.DurabilityProvider;
 
         public DurabilityProvider GetDurabilityProvider(DurableClientAttribute attribute)
         {
-            // logger.LogWarning($"{nameof(EventSourcedDurabilityProviderFactory)}.{nameof(this.GetDurabilityProvider)}");
-
-            this.eventSourcedStorageOptions.ValidateHubName(this.options.HubName);
-
-            string connectionName = attribute.ConnectionName ?? this.defaultConnectionStringName;
-            var settings = this.GetEventSourcedOrchestrationServiceSettings(connectionName, attribute.TaskHub);
-
-            // By design, we are only running one instance of the service on each host machine, for each task hub
-            return (string.Equals(this.options.HubName, this.options.HubName, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(this.entry.Settings.StorageConnectionString, settings.StorageConnectionString, StringComparison.OrdinalIgnoreCase))
-                ? this.entry.DurabilityProvider
-                : new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(settings, this.loggerFactory), connectionName);
-        }
-
-        internal EventSourcedOrchestrationServiceSettings GetEventSourcedOrchestrationServiceSettings(
-            string connectionStringName = null,
-            string taskHubNameOverride = null)
-        {
-            string resolvedStorageConnectionString = this.connectionStringResolver.Resolve(connectionStringName ?? this.eventSourcedStorageOptions.ConnectionStringName);
-            if (string.IsNullOrEmpty(resolvedStorageConnectionString))
-            {
-                throw new InvalidOperationException($"Unable to resolve configuration variable ${this.eventSourcedStorageOptions.EventHubsConnectionStringName} for the Azure storage connection string.");
-            }
-
-            string resolvedEventHubsConnectionString = this.connectionStringResolver.Resolve(this.eventSourcedStorageOptions.EventHubsConnectionStringName);
-            if (string.IsNullOrEmpty(resolvedEventHubsConnectionString))
-            {
-                throw new InvalidOperationException($"Unable to resolve configuration variable ${this.eventSourcedStorageOptions.EventHubsConnectionStringName} for the EventHubs connection string.");
-            }
-
-            var settings = new EventSourcedOrchestrationServiceSettings()
-            {
-                TaskHubName = taskHubNameOverride ?? this.options.HubName,
-                StorageConnectionString = resolvedStorageConnectionString,
-                EventHubsConnectionString = resolvedEventHubsConnectionString,
-                MaxConcurrentTaskActivityWorkItems = this.options.MaxConcurrentActivityFunctions,
-                MaxConcurrentTaskOrchestrationWorkItems = this.options.MaxConcurrentOrchestratorFunctions,
-                KeepServiceRunning = this.eventSourcedStorageOptions.RunningInTestEnvironment,
-            };
-
-            return settings;
+            return this.entry.DurabilityProvider; // TODO consider clients for other apps
         }
 
         private class Entry

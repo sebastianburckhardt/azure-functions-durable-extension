@@ -13,15 +13,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     internal class EventSourcedDurabilityProvider : DurabilityProvider
     {
         private readonly EventSourcedOrchestrationService serviceClient;
-        private readonly string connectionStringName;
 
         public const bool GenerateEtwExtensionEventsForILogger = true;
 
-        internal EventSourcedDurabilityProvider(EventSourcedOrchestrationService service, string connectionStringName)
-            : base("Event Sourced", service, service, connectionStringName)
+        internal EventSourcedDurabilityProvider(EventSourcedOrchestrationService service)
+            : base("Event Sourced", service, service, "StorageConnectionString")
         {
             this.serviceClient = service;
-            this.connectionStringName = connectionStringName;
         }
 
         public override bool SupportsEntities => true;
@@ -29,7 +27,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         /// <summary>
         /// The app setting containing the Azure Storage connection string.
         /// </summary>
-        public override string ConnectionName => this.connectionStringName;
+        public override string ConnectionName => "StorageConnectionString";  // TODO this needs to be refactored to work across providers
 
         /// <inheritdoc/>
         public async override Task<string> RetrieveSerializedEntityState(EntityId entityId, JsonSerializerSettings serializerSettings)

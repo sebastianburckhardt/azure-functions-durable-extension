@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using DurableTask.AzureStorage;
+using DurableTask.EventSourced;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -110,11 +111,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
             else if (string.Equals(storageProviderType, EventSourcedProviderType))
             {
-                options.StorageProvider[nameof(EventSourcedStorageOptions.ConnectionStringName)] = "Storage";
-                options.StorageProvider[nameof(EventSourcedStorageOptions.EventHubsConnectionStringName)] = "EventHubsConnection";
-                options.StorageProvider[nameof(EventSourcedStorageOptions.RunningInTestEnvironment)] = true;
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString)] = "$Storage";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString)] = "$EventHubsConnection";
+                options.StorageProvider[EventSourcedDurabilityProviderFactory.RunningInTestEnvironmentSetting] = "true";
 
-                // can turn off the reorder window since this is already guaranteed by EVentHubs backend
+                // can turn off the reorder window since ordered exactly-once delivery is already guaranteed by EventHubs backend
                 options.EntityMessageReorderWindowInMinutes = 0;
             }
 
