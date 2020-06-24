@@ -31,9 +31,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             IConnectionStringResolver connectionStringResolver,
             ILoggerFactory loggerFactory)
         {
-            // for debugging
-            System.Threading.Thread.Sleep(5000);
-
             this.options = options.Value;
             this.connectionStringResolver = connectionStringResolver;
             this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
