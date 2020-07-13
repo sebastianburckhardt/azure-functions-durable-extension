@@ -169,7 +169,24 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             Stopwatch stopwatch = Stopwatch.StartNew();
             while (true)
             {
-                DurableOrchestrationStatus status = await client.GetStatusAsync(instanceId);
+                DurableOrchestrationStatus status = null;
+
+                if (client is DurableClient durableClient && durableClient.DurabilityProvider.SupportsPollFreeWait)
+                {
+                    try
+                    {
+                        var state = await durableClient.DurabilityProvider.WaitForOrchestrationAsync(instanceId, null, timeout, CancellationToken.None);
+                        status = DurableClient.ConvertOrchestrationStateToStatus(state);
+                    }
+                    catch (TimeoutException)
+                    {
+                    }
+                }
+                else
+                {
+                    status = await client.GetStatusAsync(instanceId);
+                }
+
                 if (status != null)
                 {
                     if (status.RuntimeStatus == OrchestrationRuntimeStatus.Completed)

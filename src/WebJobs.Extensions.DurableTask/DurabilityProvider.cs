@@ -58,6 +58,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public virtual bool SupportsEntities => false;
 
         /// <summary>
+        /// Specifies whether the backend's WaitForOrchestration is implemented without polling.
+        /// </summary>
+        public virtual bool SupportsPollFreeWait => false;
+
+        /// <summary>
         /// JSON representation of configuration to emit in telemetry.
         /// </summary>
         public virtual JObject ConfigurationJson => EmptyConfig;
