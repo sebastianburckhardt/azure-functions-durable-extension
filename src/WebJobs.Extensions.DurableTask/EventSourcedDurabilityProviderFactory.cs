@@ -262,13 +262,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                         EndToEndTraceHelper.LocalSlotName,
                         string.Empty,
                         string.Empty,
-                        formattedString,
+                        $"{logLevel,-11} {this.prefix} {formatter(state, exception)}",
                         ExtensionVersion);
                     }
 
                     if (this.providerFactory.traceToConsole)
                     {
-                        System.Console.WriteLine(formattedString);
+                        System.Console.WriteLine($"{DateTime.UtcNow:o} {this.prefix}s{(int)logLevel} {formatter(state, exception)}");
                     }
                 }
             }
