@@ -21,23 +21,35 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private readonly DurableTaskOptions options;
         private readonly EventSourcedOrchestrationServiceSettings eventSourcedSettings;
         private readonly IConnectionStringResolver connectionStringResolver;
-        private readonly ILoggerFactory loggerFactory;
         private readonly bool runningInTestEnvironment;
+        private readonly bool traceToConsole;
+        private readonly bool traceToEtwExtension;
+        private readonly ILoggerFactory loggerFactory;
 
+        // the following are boolean options that can be passed via host.json
         public const string RunningInTestEnvironmentSetting = "RunningInTestEnvironment";
+        public const string TraceToConsole = "TraceToConsole";
+        public const string TraceToEtwExtension = "TraceToEtwExtension";
 
         public EventSourcedDurabilityProviderFactory(
             IOptions<DurableTaskOptions> options,
             IConnectionStringResolver connectionStringResolver,
             ILoggerFactory loggerFactory)
         {
+            // for debugging
+            System.Threading.Thread.Sleep(5000);
+
             this.options = options.Value;
             this.connectionStringResolver = connectionStringResolver;
             this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
             JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedSettings);
 
-            this.runningInTestEnvironment = this.options.StorageProvider.TryGetValue(RunningInTestEnvironmentSetting, out object objValue)
+            bool ReadBooleanSetting(string name) => this.options.StorageProvider.TryGetValue(name, out object objValue)
                 && objValue is string stringValue && bool.TryParse(stringValue, out bool boolValue) && boolValue;
+
+            this.runningInTestEnvironment = ReadBooleanSetting(RunningInTestEnvironmentSetting);
+            this.traceToConsole = ReadBooleanSetting(TraceToConsole);
+            this.traceToEtwExtension = ReadBooleanSetting(TraceToEtwExtension);
 
             // resolve any indirection in the specification of the two connection strings
             this.eventSourcedSettings.StorageConnectionString = this.ResolveIndirection(
@@ -80,7 +92,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             // capture trace events generated in the backend and generate an ETW event
             // this is a temporary workaround until the original ETW events are being captured by the hosted infrastructure
-            this.loggerFactory = new LoggerFactoryWrapper(loggerFactory, this.options.HubName);
+            this.loggerFactory = new LoggerFactoryWrapper(this.loggerFactory, this.options.HubName, this);
 
             if (this.runningInTestEnvironment && cachedTestEntry != null)
             {
@@ -176,12 +188,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private class LoggerFactoryWrapper : ILoggerFactory
         {
             private readonly ILoggerFactory loggerFactory;
+            private readonly EventSourcedDurabilityProviderFactory providerFactory;
             private readonly string hubName;
 
-            public LoggerFactoryWrapper(ILoggerFactory loggerFactory, string hubName)
+            public LoggerFactoryWrapper(ILoggerFactory loggerFactory, string hubName, EventSourcedDurabilityProviderFactory providerFactory)
             {
                 this.hubName = hubName;
                 this.loggerFactory = loggerFactory;
+                this.providerFactory = providerFactory;
             }
 
             public void AddProvider(ILoggerProvider provider)
@@ -192,7 +206,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public ILogger CreateLogger(string categoryName)
             {
                 var logger = this.loggerFactory.CreateLogger(categoryName);
-                return new LoggerWrapper(logger, categoryName, this.hubName);
+                return new LoggerWrapper(logger, categoryName, this.hubName, this.providerFactory);
             }
 
             public void Dispose()
@@ -207,12 +221,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             private readonly ILogger logger;
             private readonly string prefix;
             private readonly string hubName;
+            private readonly EventSourcedDurabilityProviderFactory providerFactory;
 
-            public LoggerWrapper(ILogger logger, string category, string hubName)
+            public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory)
             {
                 this.logger = logger;
                 this.prefix = $"[{category}]";
                 this.hubName = hubName;
+                this.providerFactory = providerFactory;
             }
 
             public IDisposable BeginScope<TState>(TState state)
@@ -231,7 +247,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 {
                     this.logger.Log(logLevel, eventId, state, exception, formatter);
 
-                    if (EventSourcedDurabilityProvider.GenerateEtwExtensionEventsForILogger)
+                    string formattedString = null;
+
+                    if (this.providerFactory.traceToEtwExtension || this.providerFactory.traceToConsole)
+                    {
+                        formattedString = $"{logLevel,-11} {this.prefix} {formatter(state, exception)}";
+                    }
+
+                    if (this.providerFactory.traceToEtwExtension)
                     {
                         EtwEventSource.Instance.ExtensionInformationalEvent(
                         this.hubName,
@@ -239,8 +262,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                         EndToEndTraceHelper.LocalSlotName,
                         string.Empty,
                         string.Empty,
-                        $"{logLevel,-11} {this.prefix} {formatter(state, exception)}",
+                        formattedString,
                         ExtensionVersion);
+                    }
+
+                    if (this.providerFactory.traceToConsole)
+                    {
+                        System.Console.WriteLine(formattedString);
                     }
                 }
             }

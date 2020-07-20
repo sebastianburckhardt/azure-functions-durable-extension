@@ -14,8 +14,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     {
         private readonly EventSourcedOrchestrationService serviceClient;
 
-        public const bool GenerateEtwExtensionEventsForILogger = true;
-
         internal EventSourcedDurabilityProvider(EventSourcedOrchestrationService service)
             : base("Event Sourced", service, service, "StorageConnectionString")
         {
