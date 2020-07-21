@@ -90,9 +90,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             var traceHelper = new EndToEndTraceHelper(logger, false);
             traceHelper.ExtensionWarningEvent(this.options.HubName, string.Empty, string.Empty, $"{providerFactoryName} instantiated");
 
-            // capture trace events generated in the backend and generate an ETW event
-            // this is a temporary workaround until the original ETW events are being captured by the hosted infrastructure
-            this.loggerFactory = new LoggerFactoryWrapper(this.loggerFactory, this.options.HubName, this);
+            if (this.traceToConsole || this.traceToEtwExtension)
+            {
+                // capture trace events generated in the backend and redirect them to generate an ETW event, or to trace to console
+                this.loggerFactory = new LoggerFactoryWrapper(this.loggerFactory, this.options.HubName, this);
+            }
 
             if (this.runningInTestEnvironment && cachedTestEntry != null)
             {
