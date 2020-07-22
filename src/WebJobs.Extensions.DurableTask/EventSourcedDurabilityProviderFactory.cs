@@ -2,8 +2,12 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
+using System.IO;
+using System.Threading;
 using DurableTask.Core;
 using DurableTask.EventSourced;
+using Microsoft.Azure.Storage;
+using Microsoft.Azure.Storage.Blob;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
@@ -24,12 +28,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private readonly bool runningInTestEnvironment;
         private readonly bool traceToConsole;
         private readonly bool traceToEtwExtension;
+        private readonly bool traceToBlob;
         private readonly ILoggerFactory loggerFactory;
 
         // the following are boolean options that can be passed via host.json
         public const string RunningInTestEnvironmentSetting = "RunningInTestEnvironment";
         public const string TraceToConsole = "TraceToConsole";
         public const string TraceToEtwExtension = "TraceToEtwExtension";
+        public const string TraceToBlob = "TraceToBlob";
 
         public EventSourcedDurabilityProviderFactory(
             IOptions<DurableTaskOptions> options,
@@ -50,6 +56,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.runningInTestEnvironment = ReadBooleanSetting(RunningInTestEnvironmentSetting);
             this.traceToConsole = ReadBooleanSetting(TraceToConsole);
             this.traceToEtwExtension = ReadBooleanSetting(TraceToEtwExtension);
+            this.traceToBlob = ReadBooleanSetting(TraceToBlob);
 
             // resolve any indirection in the specification of the two connection strings
             this.eventSourcedSettings.StorageConnectionString = this.ResolveIndirection(
@@ -58,6 +65,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.eventSourcedSettings.EventHubsConnectionString = this.ResolveIndirection(
                 this.eventSourcedSettings.EventHubsConnectionString,
                 nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString));
+
+            // if worker id is specified in environment, it overrides the file setting
+            string workerId = Environment.GetEnvironmentVariable("WorkerId");
+            if (!string.IsNullOrEmpty(workerId))
+            {
+                this.eventSourcedSettings.WorkerId = workerId;
+            }
 
             if (this.runningInTestEnvironment)
             {
@@ -90,7 +104,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             var traceHelper = new EndToEndTraceHelper(logger, false);
             traceHelper.ExtensionWarningEvent(this.options.HubName, string.Empty, string.Empty, $"{providerFactoryName} instantiated");
 
-            if (this.traceToConsole || this.traceToEtwExtension)
+            if (this.traceToConsole || this.traceToEtwExtension || this.traceToBlob)
             {
                 // capture trace events generated in the backend and redirect them to generate an ETW event, or to trace to console
                 this.loggerFactory = new LoggerFactoryWrapper(this.loggerFactory, this.options.HubName, this);
@@ -192,12 +206,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             private readonly ILoggerFactory loggerFactory;
             private readonly EventSourcedDurabilityProviderFactory providerFactory;
             private readonly string hubName;
+            private readonly BlobLogger blobLogger;
 
             public LoggerFactoryWrapper(ILoggerFactory loggerFactory, string hubName, EventSourcedDurabilityProviderFactory providerFactory)
             {
                 this.hubName = hubName;
                 this.loggerFactory = loggerFactory;
                 this.providerFactory = providerFactory;
+
+                if (providerFactory.traceToBlob)
+                {
+                    this.blobLogger = new BlobLogger(providerFactory);
+                }
             }
 
             public void AddProvider(ILoggerProvider provider)
@@ -208,7 +228,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public ILogger CreateLogger(string categoryName)
             {
                 var logger = this.loggerFactory.CreateLogger(categoryName);
-                return new LoggerWrapper(logger, categoryName, this.hubName, this.providerFactory);
+                return new LoggerWrapper(logger, categoryName, this.hubName, this.providerFactory, this.blobLogger);
             }
 
             public void Dispose()
@@ -224,13 +244,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             private readonly string prefix;
             private readonly string hubName;
             private readonly EventSourcedDurabilityProviderFactory providerFactory;
+            private readonly BlobLogger blobLogger;
 
-            public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory)
+            public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory, BlobLogger blobLogger)
             {
                 this.logger = logger;
                 this.prefix = $"[{category}]";
                 this.hubName = hubName;
                 this.providerFactory = providerFactory;
+                this.blobLogger = blobLogger;
             }
 
             public IDisposable BeginScope<TState>(TState state)
@@ -238,23 +260,16 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 return this.logger.BeginScope(state);
             }
 
-            public bool IsEnabled(LogLevel logLevel)
+            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel)
             {
                 return this.logger.IsEnabled(logLevel);
             }
 
-            public void Log<TState>(LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+            public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
             {
                 if (this.logger.IsEnabled(logLevel))
                 {
                     this.logger.Log(logLevel, eventId, state, exception, formatter);
-
-                    string formattedString = null;
-
-                    if (this.providerFactory.traceToEtwExtension || this.providerFactory.traceToConsole)
-                    {
-                        formattedString = $"{logLevel,-11} {this.prefix} {formatter(state, exception)}";
-                    }
 
                     if (this.providerFactory.traceToEtwExtension)
                     {
@@ -268,10 +283,78 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                         ExtensionVersion);
                     }
 
-                    if (this.providerFactory.traceToConsole)
+                    if (this.providerFactory.traceToConsole || this.blobLogger != null)
                     {
-                        System.Console.WriteLine($"{DateTime.UtcNow:o} {this.prefix}s{(int)logLevel} {formatter(state, exception)}");
+                        string formattedString = $"{DateTime.UtcNow:o} {this.prefix}s{(int)logLevel} {formatter(state, exception)}";
+
+                        if (this.providerFactory.traceToConsole)
+                        {
+                            System.Console.WriteLine(formattedString);
+                        }
+
+                        this.blobLogger?.WriteLine(formattedString);
                     }
+                }
+            }
+        }
+
+        private class BlobLogger
+        {
+            private readonly DateTime starttime;
+            private readonly CloudAppendBlob blob;
+            private readonly object lineLock = new object();
+            private MemoryStream memoryStream;
+            private StreamWriter writer;
+            private Timer timer;
+
+            public BlobLogger(EventSourcedDurabilityProviderFactory providerFactory)
+            {
+                this.starttime = DateTime.UtcNow;
+
+                var storageAccount = CloudStorageAccount.Parse(providerFactory.eventSourcedSettings.StorageConnectionString);
+                var client = storageAccount.CreateCloudBlobClient();
+                var container = client.GetContainerReference("logs");
+                container.CreateIfNotExists();
+                this.blob = container.GetAppendBlobReference($"{providerFactory.eventSourcedSettings.WorkerId}.{this.starttime:o}.log");
+                this.blob.CreateOrReplace();
+
+                this.memoryStream = new MemoryStream();
+                this.writer = new StreamWriter(this.memoryStream);
+
+                var interval = 14000 + new Random().Next(1000);
+                this.timer = new Timer(this.Flush, null, interval, interval);
+            }
+
+            public void WriteLine(string line)
+            {
+                lock (this.lineLock)
+                {
+                    this.writer.WriteLine(line);
+                }
+            }
+
+            public void Flush(object ignored)
+            {
+                MemoryStream toSave = null;
+
+                // grab current buffer and create new one
+                lock (this.lineLock)
+                {
+                    this.writer.Flush();
+                    if (this.memoryStream.Position > 0)
+                    {
+                        toSave = this.memoryStream;
+                        this.memoryStream = new MemoryStream();
+                        this.writer = new StreamWriter(this.memoryStream);
+                    }
+                }
+
+                if (toSave != null)
+                {
+                    // save to storage
+                    toSave.Seek(0, SeekOrigin.Begin);
+                    this.blob.AppendFromStream(toSave);
+                    toSave.Dispose();
                 }
             }
         }
