@@ -721,6 +721,10 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 {
                     return await client.WaitForCompletionOrCreateCheckStatusResponseAsync(request, id, timeout.Value, pollingInterval.Value);
                 }
+                else if (timeout.HasValue && client is DurableClient durableClient && durableClient.DurabilityProvider.SupportsPollFreeWait)
+                {
+                    return await client.WaitForCompletionOrCreateCheckStatusResponseAsync(request, id, timeout.Value, timeout.Value);
+                }
                 else
                 {
                     return client.CreateCheckStatusResponse(request, id);
