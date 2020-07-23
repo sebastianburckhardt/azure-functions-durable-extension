@@ -249,7 +249,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory, BlobLogger blobLogger)
             {
                 this.logger = logger;
-                this.prefix = $"[{category}]";
+                this.prefix = $"{providerFactory.eventSourcedSettings.WorkerId} [{category}]";
                 this.hubName = hubName;
                 this.providerFactory = providerFactory;
                 this.blobLogger = blobLogger;
@@ -302,6 +302,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             private readonly DateTime starttime;
             private readonly CloudAppendBlob blob;
+            private readonly object flushLock = new object();
             private readonly object lineLock = new object();
             private MemoryStream memoryStream;
             private StreamWriter writer;
@@ -335,26 +336,36 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             public void Flush(object ignored)
             {
-                MemoryStream toSave = null;
-
-                // grab current buffer and create new one
-                lock (this.lineLock)
+                if (Monitor.TryEnter(this.flushLock))
                 {
-                    this.writer.Flush();
-                    if (this.memoryStream.Position > 0)
+                    try
                     {
-                        toSave = this.memoryStream;
-                        this.memoryStream = new MemoryStream();
-                        this.writer = new StreamWriter(this.memoryStream);
-                    }
-                }
+                        MemoryStream toSave = null;
 
-                if (toSave != null)
-                {
-                    // save to storage
-                    toSave.Seek(0, SeekOrigin.Begin);
-                    this.blob.AppendFromStream(toSave);
-                    toSave.Dispose();
+                        // grab current buffer and create new one
+                        lock (this.lineLock)
+                        {
+                            this.writer.Flush();
+                            if (this.memoryStream.Position > 0)
+                            {
+                                toSave = this.memoryStream;
+                                this.memoryStream = new MemoryStream();
+                                this.writer = new StreamWriter(this.memoryStream);
+                            }
+                        }
+
+                        if (toSave != null)
+                        {
+                            // save to storage
+                            toSave.Seek(0, SeekOrigin.Begin);
+                            this.blob.AppendFromStream(toSave);
+                            toSave.Dispose();
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(this.flushLock);
+                    }
                 }
             }
         }
