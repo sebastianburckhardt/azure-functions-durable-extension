@@ -203,7 +203,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
             using (ITestHost host = TestHelpers.GetJobHost(
                 this.loggerProvider,
-                nameof(this.HelloWorldOrchestration_Inline),
+                nameof(this.ParentInstanceId_Not_Assigned_In_Orchestrator),
                 extendedSessions,
                 storageProviderType: storageProvider))
             {
@@ -1096,7 +1096,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             var extendedSessions = false;
             using (ITestHost host = TestHelpers.GetJobHost(
                 this.loggerProvider,
-                nameof(this.WaitForExternalEventWithTimeout),
+                nameof(this.WaitForExternalEventWithTooLargeTimeout),
                 extendedSessions))
             {
                 await host.StartAsync();
@@ -1344,7 +1344,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [MemberData(nameof(TestDataGenerator.GetFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
         public async Task SubOrchestration_ComplexType(string storageProvider)
         {
-            await this.SubOrchestration_ComplexType_Main_Logic(storageProvider);
+            await this.SubOrchestration_ComplexType_Main_Logic(nameof(this.SubOrchestration_ComplexType), storageProvider);
         }
 
         /// <summary>
@@ -1355,7 +1355,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [MemberData(nameof(TestDataGenerator.GetHistoryStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
         public async Task SubOrchestration_ComplexType_History(string storageProvider)
         {
-            await this.SubOrchestration_ComplexType_Main_Logic(storageProvider, showHistory: true);
+            await this.SubOrchestration_ComplexType_Main_Logic(nameof(this.SubOrchestration_ComplexType_History), storageProvider, showHistory: true);
         }
 
         /// <summary>
@@ -1366,7 +1366,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [MemberData(nameof(TestDataGenerator.GetHistoryStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
         public async Task SubOrchestration_ComplexType_HistoryInputOutput(string storageProvider)
         {
-            await this.SubOrchestration_ComplexType_Main_Logic(storageProvider, showHistory: true, showHistoryOutput: true);
+            await this.SubOrchestration_ComplexType_Main_Logic(nameof(this.SubOrchestration_ComplexType_HistoryInputOutput), storageProvider, showHistory: true, showHistoryOutput: true);
         }
 
         /// <summary>
@@ -1375,9 +1375,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         [MemberData(nameof(TestDataGenerator.GetBooleanAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
-        public async Task SubOrchestration_Has_Valid_ParentInstanceId_Assigned(bool extendedSessions, string storageProvider)
+        public async Task SubOrchestration_ParentInstanceId_Assigned(bool extendedSessions, string storageProvider)
         {
-            const string TaskHub = nameof(this.SubOrchestration_ComplexType);
+            const string TaskHub = nameof(this.SubOrchestration_ParentInstanceId_Assigned);
             using (ITestHost host = TestHelpers.GetJobHost(this.loggerProvider, TaskHub, extendedSessions, storageProviderType: storageProvider))
             {
                 await host.StartAsync();
@@ -1403,10 +1403,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
         }
 
-        private async Task SubOrchestration_ComplexType_Main_Logic(string storageProvider, bool showHistory = false, bool showHistoryOutput = false)
+        private async Task SubOrchestration_ComplexType_Main_Logic(string taskHub, string storageProvider, bool showHistory = false, bool showHistoryOutput = false)
         {
-            const string TaskHub = nameof(this.SubOrchestration_ComplexType);
-            using (ITestHost host = TestHelpers.GetJobHost(this.loggerProvider, TaskHub, enableExtendedSessions: false, storageProviderType: storageProvider))
+            using (ITestHost host = TestHelpers.GetJobHost(this.loggerProvider, taskHub, enableExtendedSessions: false, storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
@@ -1502,7 +1501,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [InlineData(false)]
         public async Task SubOrchestration_Requires_Different_Id_Than_Parent(bool extendedSessions)
         {
-            const string TaskHub = nameof(this.SubOrchestration_ComplexType);
+            const string TaskHub = nameof(this.SubOrchestration_Requires_Different_Id_Than_Parent);
             using (ITestHost host = TestHelpers.GetJobHost(this.loggerProvider, TaskHub, extendedSessions))
             {
                 await host.StartAsync();
@@ -1567,7 +1566,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 // Strip '\r' characters to make Windows and Unix output identical.
                 string output = status.Output.ToString().Replace("\r", string.Empty);
                 this.output.WriteLine($"Orchestration output string: {output}");
-                Assert.StartsWith($"Orchestrator function '{orchestratorFunctionNames[0]}' failed: The orchestrator function 'ThrowOrchestrator' failed: \"Value cannot be null.\nParameter name: message\"", output);
+                Assert.StartsWith($"Orchestrator function '{orchestratorFunctionNames[0]}' failed: The orchestrator function 'ThrowOrchestrator' failed: \"Value cannot be null.", output);
+                Assert.Contains("message", output);
 
                 string subOrchestrationInstanceId = (string)status.CustomStatus;
                 Assert.NotNull(subOrchestrationInstanceId);
@@ -1616,8 +1616,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 string output = status.Output.ToString().Replace(Environment.NewLine, " ");
                 this.output.WriteLine($"Orchestration output string: {output}");
                 Assert.StartsWith(
-                    $"Orchestrator function '{orchestratorFunctionNames[0]}' failed: Value cannot be null. Parameter name: retryOptions",
+                    $"Orchestrator function '{orchestratorFunctionNames[0]}' failed: Value cannot be null.",
                     output);
+                Assert.Contains("retryOptions", output);
 
                 await host.StopAsync();
             }
@@ -1801,7 +1802,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 this.output.WriteLine($"Orchestration output string: {output}");
                 Assert.Contains(orchestratorFunctionName, output);
                 Assert.Contains("Value cannot be null.", output);
-                Assert.Contains("Parameter name: retryOptions", output);
+                Assert.Contains("retryOptions", output);
 
                 await host.StopAsync();
             }
@@ -1990,25 +1991,51 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         [MemberData(nameof(TestDataGenerator.GetBooleanAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
-        public async Task ThrowExceptionOnLongTimer(bool extendedSessions, string storageProvider)
+        public async Task HandleUncallableOrchestrator(bool extendedSessions, string storageProvider)
         {
             using (ITestHost host = TestHelpers.GetJobHost(
                 this.loggerProvider,
-                nameof(this.Orchestration_OnValidOrchestrator),
+                nameof(this.HandleUncallableOrchestrator),
                 extendedSessions,
                 storageProviderType: storageProvider))
             {
                 await host.StartAsync();
 
-                // Right now, the limit for timers is 6 days. In the future, we'll extend this and update this test.
-                // https://github.com/Azure/azure-functions-durable-extension/issues/14
-                DateTime fireAt = DateTime.UtcNow.AddDays(7);
-                var client = await host.StartOrchestratorAsync(nameof(TestOrchestrations.Timer), fireAt, this.output);
+                var client = await host.StartOrchestratorAsync(nameof(UnconstructibleClass.UncallableOrchestrator), null, this.output);
                 var status = await client.WaitForCompletionAsync(this.output);
 
                 Assert.NotNull(status);
                 Assert.Equal(OrchestrationRuntimeStatus.Failed, status.RuntimeStatus);
-                Assert.Contains("fireAt", status.Output.ToString());
+#if FUNCTIONS_V1
+                Assert.Equal("Orchestrator function 'UncallableOrchestrator' failed: Exception has been thrown by the target of an invocation.", status.Output.ToString());
+#else
+                Assert.Equal("Orchestrator function 'UncallableOrchestrator' failed: Exception of type 'System.Exception' was thrown.", status.Output.ToString());
+#endif
+
+                await host.StopAsync();
+            }
+        }
+
+        [Theory]
+        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
+        [MemberData(nameof(TestDataGenerator.GetBooleanAndFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        public async Task HandleUncallableFunctions(bool extendedSessions, string storageProvider)
+        {
+            using (ITestHost host = TestHelpers.GetJobHost(
+                this.loggerProvider,
+                nameof(this.HandleUncallableFunctions),
+                extendedSessions,
+                storageProviderType: storageProvider))
+            {
+                await host.StartAsync();
+
+                var entityId = new EntityId(nameof(UnconstructibleClass.UncallableEntity), Guid.NewGuid().ToString());
+                var client = await host.StartOrchestratorAsync(nameof(TestOrchestrations.HandleUncallableFunctions), entityId, this.output);
+                var status = await client.WaitForCompletionAsync(this.output);
+
+                Assert.NotNull(status);
+                Assert.Equal(OrchestrationRuntimeStatus.Completed, status.RuntimeStatus);
+                Assert.Equal("ok", status.Output.ToString());
 
                 await host.StopAsync();
             }
@@ -2033,7 +2060,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
             using (ITestHost host = TestHelpers.GetJobHost(
                 this.loggerProvider,
-                nameof(this.Orchestration_OnUnregisteredActivity),
+                nameof(this.Orchestration_OnUnregisteredOrchestrator),
                 extendedSessions,
                 storageProviderType: storageProvider))
             {
@@ -2934,6 +2961,35 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         }
 
         /// <summary>
+        /// Test an entity that signals itself with a delay.
+        /// </summary>
+        [Theory]
+        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task DurableEntity_SelfSchedulingEntity(bool extendedSessions)
+        {
+            using (var host = TestHelpers.GetJobHost(
+                this.loggerProvider,
+                nameof(this.DurableEntity_SelfSchedulingEntity),
+                enableExtendedSessions: extendedSessions))
+            {
+                await host.StartAsync();
+
+                var entityId = new EntityId(nameof(TestEntityClasses.SelfSchedulingEntity), Guid.NewGuid().ToString("N"));
+                TestEntityClient client = await host.GetEntityClientAsync(entityId, this.output);
+                await client.SignalEntity(this.output, "Start", null);
+
+                var timeout = Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10);
+                var state = await client.WaitForEntityState<TestEntityClasses.SelfSchedulingEntity>(this.output, timeout, curstate => curstate.Value.Length == 4 ? null : "expect 4 letters");
+
+                Assert.Equal("ABCD", state.Value);
+
+                await host.StopAsync();
+            }
+        }
+
+        /// <summary>
         /// End-to-end test which validates an entity scenario where three "LockedIncrement" orchestrations
         /// concurrently increment a counter saved in blob storage, using a read-modify-write pattern, while holding
         /// a lock on the same entity. This tests that the lock prevents the interleaving of these orchestrations.
@@ -3195,31 +3251,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
         [Fact]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        public async Task AzureStorage_TimerLimitExceeded_ThrowsException()
-        {
-            string orchestrationFunctionName = nameof(TestOrchestrations.SimpleTimerSucceeds);
-
-            using (var host = TestHelpers.GetJobHost(
-                this.loggerProvider,
-                nameof(this.AzureStorage_TimerLimitExceeded_ThrowsException),
-                false))
-            {
-                await host.StartAsync();
-
-                var invalidFireAtTime = DateTime.UtcNow.AddDays(7);
-
-                var client = await host.StartOrchestratorAsync(orchestrationFunctionName, invalidFireAtTime, this.output);
-
-                var status = await client.WaitForCompletionAsync(this.output);
-                Assert.Equal(OrchestrationRuntimeStatus.Failed, status.RuntimeStatus);
-
-                string output = status.Output.ToString();
-                Assert.Contains("fireAt", output);
-            }
-        }
-
-        [Fact]
-        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         public async Task AzureStorage_FirstRetryIntervalLimitHit_ThrowsException()
         {
             string orchestrationFunctionName = nameof(TestOrchestrations.SimpleActivityRetrySuccceds);
@@ -3453,7 +3484,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             };
             using (var host = TestHelpers.GetJobHost(
                 this.loggerProvider,
-                nameof(this.DurableEntity_EntityProxy),
+                nameof(this.DurableEntity_EntityProxy_NameResolve),
                 enableExtendedSessions: extendedSessions,
                 storageProviderType: storageProvider))
             {
@@ -4386,6 +4417,34 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
         [Fact]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
+        public async Task CustomSerializerSettings_TypeNameHandlingAll()
+        {
+            string[] orchestratorFunctionNames =
+            {
+                nameof(TestOrchestrations.SayHelloWithActivity),
+            };
+
+            using (var host = TestHelpers.GetJobHost(
+                this.loggerProvider,
+                nameof(this.CustomIMessageSerializerSettingsFactory),
+                true,
+                serializerSettings: new CustomTypeNameHandlingSettings()))
+            {
+                await host.StartAsync();
+
+                var client = await host.StartOrchestratorAsync(orchestratorFunctionNames[0], "World", this.output);
+                var status = await client.WaitForCompletionAsync(this.output);
+
+                Assert.Equal(OrchestrationRuntimeStatus.Completed, status?.RuntimeStatus);
+                Assert.Equal("World", status?.Input);
+                Assert.Equal("Hello, World!", status?.Output);
+
+                await host.StopAsync();
+            }
+        }
+
+        [Fact]
+        [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         public async Task DefaultIMessageSerializerSettingsFactory()
         {
             string[] orchestratorFunctionNames =
@@ -4664,6 +4723,18 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 serializer.Converters.Add(new StringEnumConverter());
 
                 return serializer;
+            }
+        }
+
+        // JsonSerializerSettings with TypeNameHandling.All
+        private class CustomTypeNameHandlingSettings : IMessageSerializerSettingsFactory
+        {
+            public JsonSerializerSettings CreateJsonSerializerSettings()
+            {
+                return new JsonSerializerSettings()
+                {
+                    TypeNameHandling = TypeNameHandling.All,
+                };
             }
         }
     }

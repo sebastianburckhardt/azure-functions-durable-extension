@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
@@ -69,6 +68,19 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             Task<string> GetId();
         }
 
+        public interface ISelfSchedulingEntity
+        {
+            void Start();
+
+            void A();
+
+            Task B();
+
+            void C();
+
+            Task<int> D();
+        }
+
         public interface IFaultyEntity
         {
             Task<int> Get();
@@ -124,6 +136,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             return context.DispatchAsync<StorageBackedCounter>(blobContainer);
         }
 
+        [FunctionName(nameof(SelfSchedulingEntity))]
+        public static Task SelfSchedulingEntityFunction([EntityTrigger] IDurableEntityContext context)
+        {
+            return context.DispatchAsync<SelfSchedulingEntity>();
+        }
+
+#pragma warning disable DF0305 // Function named 'ClassBasedFaultyEntity' doesn't have an entity class with the same name defined. Did you mean 'FaultyEntity'?
+#pragma warning disable DF0307 // DispatchAsync must be used with the entity name, equal to the name of the function it's used in.
         [FunctionName("ClassBasedFaultyEntity")]
         public static Task FaultyEntityFunction([EntityTrigger] IDurableEntityContext context)
         {
@@ -234,6 +254,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
             return Task.CompletedTask;
         }
+#pragma warning restore DF0307 // DispatchAsync must be used with the entity name, equal to the name of the function it's used in.
+#pragma warning restore DF0305
 
         //-------------- an entity representing a chat room -----------------
 
@@ -298,6 +320,51 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             public void Delete()
             {
                 Entity.Current.DeleteState();
+            }
+        }
+
+        //-------------- An entity that schedules itself ------------------
+        [JsonObject(MemberSerialization = MemberSerialization.OptIn)]
+        public class SelfSchedulingEntity : ISelfSchedulingEntity
+        {
+            [JsonProperty]
+            public string Value { get; set; } = "";
+
+            public void Start()
+            {
+                var now = DateTime.UtcNow;
+
+                var timeA = now + TimeSpan.FromSeconds(1);
+                var timeB = now + TimeSpan.FromSeconds(2);
+                var timeC = now + TimeSpan.FromSeconds(3);
+                var timeD = now + TimeSpan.FromSeconds(4);
+
+                Entity.Current.SignalEntity<ISelfSchedulingEntity>(Entity.Current.EntityId.EntityKey, timeD, p => p.D());
+                Entity.Current.SignalEntity<ISelfSchedulingEntity>(Entity.Current.EntityId.EntityKey, timeC, p => p.C());
+                Entity.Current.SignalEntity<ISelfSchedulingEntity>(Entity.Current.EntityId.EntityKey, timeB, p => p.B());
+                Entity.Current.SignalEntity<ISelfSchedulingEntity>(Entity.Current.EntityId.EntityKey, timeA, p => p.A());
+            }
+
+            public void A()
+            {
+                this.Value += "A";
+            }
+
+            public Task B()
+            {
+                this.Value += "B";
+                return Task.Delay(100);
+            }
+
+            public void C()
+            {
+                this.Value += "C";
+            }
+
+            public Task<int> D()
+            {
+                this.Value += "D";
+                return Task.FromResult(111);
             }
         }
 
@@ -549,7 +616,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             [JsonProperty("endDate")]
             public DateTime EndDate { get; private set; }
 
-            public void SetId(string Id) => this.Id = Id;
+            public void SetId(string id) => this.Id = id;
 
             public void SetEndDate(DateTime date) => this.EndDate = date;
 
@@ -562,10 +629,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             public void Delete()
             {
                 Entity.Current.DeleteState();
-            }
-
-            public JobWithProxyMultiInterface()
-            {
             }
 
             [FunctionName(nameof(JobWithProxyMultiInterface))]

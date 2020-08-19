@@ -59,7 +59,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             ctx.SignalEntity(input, "count");
 
             ctx.SetCustomStatus("AllAPICallsUsed");
-            await ctx.CallHttpAsync(null);
+
+            // next call shouldn't run because MaxOrchestrationCount is reached
+            await ctx.CallActivityAsync<string>(nameof(TestActivities.Hello), stringInput);
 
             return "TestCompleted";
         }
@@ -949,6 +951,50 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
             Assert.Equal(7, await entity.GetNumberIncrementsSent()); // this was the total number of sends
             Assert.Equal(11, await entity.Get()); // this was the last value written
+
+            return "ok";
+        }
+
+        public static async Task<string> HandleUncallableFunctions([OrchestrationTrigger] IDurableOrchestrationContext ctx)
+        {
+            var entityId = ctx.GetInput<EntityId>();
+
+            // even though the entity function cannot be called the entity can still be used as a lock!
+            using (await ctx.LockAsync(entityId))
+            {
+                try
+                {
+                    var result = await ctx.CallEntityAsync<int>(entityId, "get");
+                }
+#if FUNCTIONS_V1
+                catch (Exception e) when (e.Message == "Exception has been thrown by the target of an invocation.")
+#else
+                catch (Exception e) when (e.Message == "Exception of type 'System.Exception' was thrown.")
+#endif
+                {
+                }
+            }
+
+            // signals fail silently
+            ctx.SignalEntity(entityId, "hello");
+
+            // test that the lock is still available
+            using (await ctx.LockAsync(entityId))
+            {
+            }
+
+            // try an uncallable activity
+            try
+            {
+                var result = await ctx.CallActivityAsync<int>(nameof(UnconstructibleClass.UncallableActivity), null);
+            }
+#if FUNCTIONS_V1
+            catch (FunctionFailedException e) when (e.Message == "The activity function 'UncallableActivity' failed: \"Exception has been thrown by the target of an invocation.\". See the function execution logs for additional details.")
+#else
+            catch (FunctionFailedException e) when (e.Message == "The activity function 'UncallableActivity' failed: \"Exception of type 'System.Exception' was thrown.\". See the function execution logs for additional details.")
+#endif
+            {
+            }
 
             return "ok";
         }
