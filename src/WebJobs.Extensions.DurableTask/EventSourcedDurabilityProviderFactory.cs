@@ -31,7 +31,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         private readonly bool traceToBlob;
         private readonly ILoggerFactory loggerFactory;
 
-        // the following are boolean options that can be passed via host.json
+        // the following are boolean options that can be specified in the json,
+        // but are not passed on to the backend
         public const string RunningInTestEnvironmentSetting = "RunningInTestEnvironment";
         public const string TraceToConsole = "TraceToConsole";
         public const string TraceToEtwExtension = "TraceToEtwExtension";
@@ -48,6 +49,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.options = options.Value;
             this.connectionStringResolver = connectionStringResolver;
             this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
+
+            // copy all applicable fields from both the options and the storageProvider options
+            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options), this.eventSourcedSettings);
             JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedSettings);
 
             bool ReadBooleanSetting(string name) => this.options.StorageProvider.TryGetValue(name, out object objValue)
@@ -77,11 +81,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 // use a single task hub name for all tests to allow reuse between tests with same settings
                 this.options.HubName = "test-taskhub";
-            }
-            else if (!string.IsNullOrEmpty(this.eventSourcedSettings.TaskHubName))
-            {
-                // use the taskhubname specified in the settings
-                this.options.HubName = this.eventSourcedSettings.TaskHubName;
+                this.eventSourcedSettings.KeepServiceRunning = true;
             }
 
             // if the taskhubname is not valid, replace it with a default
@@ -91,11 +91,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
 
             // make sure the settings we pass on have the fields correctly set
-            this.eventSourcedSettings.TaskHubName = this.options.HubName;
-            if (this.runningInTestEnvironment)
-            {
-                this.eventSourcedSettings.KeepServiceRunning = true;
-            }
+            this.eventSourcedSettings.HubName = this.options.HubName;
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
             this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
