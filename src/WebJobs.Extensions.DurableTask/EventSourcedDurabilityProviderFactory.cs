@@ -241,6 +241,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             private readonly string hubName;
             private readonly EventSourcedDurabilityProviderFactory providerFactory;
             private readonly BlobLogger blobLogger;
+            private readonly bool fullTracing;
 
             public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory, BlobLogger blobLogger)
             {
@@ -249,6 +250,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 this.hubName = hubName;
                 this.providerFactory = providerFactory;
                 this.blobLogger = blobLogger;
+                this.fullTracing = this.providerFactory.traceToBlob || this.providerFactory.traceToConsole || this.providerFactory.traceToEtwExtension;
             }
 
             public IDisposable BeginScope<TState>(TState state)
@@ -258,12 +260,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
             public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel)
             {
-                return this.logger.IsEnabled(logLevel);
+                return this.fullTracing || this.logger.IsEnabled(logLevel);
             }
 
             public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
             {
-                if (this.logger.IsEnabled(logLevel))
+                if (this.IsEnabled(logLevel))
                 {
                     this.logger.Log(logLevel, eventId, state, exception, formatter);
 
