@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -23,6 +24,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public override bool SupportsEntities => true;
 
         public override bool SupportsPollFreeWait => true;
+
+        public override TimeSpan MaximumDelayTime { get; set; } = TimeSpan.MaxValue;
 
         /// <summary>
         /// The app setting containing the Azure Storage connection string.
