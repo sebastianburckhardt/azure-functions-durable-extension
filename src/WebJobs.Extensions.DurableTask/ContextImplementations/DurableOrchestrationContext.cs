@@ -89,6 +89,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal ExceptionDispatchInfo OrchestrationException { get; set; }
 
+        internal TaskOrchestrationWorkItem WorkItem { get; set; }
+
         internal bool IsOutputSet => this.serializedOutput != null;
 
         private string OrchestrationName => this.FunctionName;
@@ -1152,6 +1154,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
 
             this.IncrementActionsOrThrowException();
+            this.TraceEntityMessageSend(this.InnerContext, eventContent);
             this.InnerContext.SendEvent(target, eventName, eventContent);
         }
 
@@ -1164,6 +1167,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             else
             {
                 this.actionCount++;
+            }
+        }
+
+        private void TraceEntityMessageSend(OrchestrationContext innerContext, object eventContent)
+        {
+            if (!innerContext.IsReplaying)
+            {
+                this.WorkItem.TraceProgress("sends {entityMessage}", eventContent);
             }
         }
 

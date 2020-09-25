@@ -59,6 +59,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal bool IsNewlyConstructed { get; set; }
 
+        internal TaskOrchestrationWorkItem WorkItem { get; set; }
+
         string IDurableEntityContext.EntityName => this.self.EntityName;
 
         string IDurableEntityContext.EntityKey => this.self.EntityKey;
@@ -504,6 +506,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             lockMessage.EventName,
                             lockMessage.EventContent);
 
+                        this.TraceEntityMessage(innerContext, lockMessage.EventContent);
                         innerContext.SendEvent(lockMessage.Target, lockMessage.EventName, lockMessage.EventContent);
                     }
                     else if (message is ResultMessage resultMessage)
@@ -524,6 +527,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             resultMessage.EventName,
                             resultMessage.EventContent);
 
+                        this.TraceEntityMessage(innerContext, resultMessage.EventContent);
                         innerContext.SendEvent(resultMessage.Target, resultMessage.EventName, resultMessage.EventContent);
                     }
                     else if (!writeBackSuccessful)
@@ -545,6 +549,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                             operationMessage.EventName,
                             operationMessage.EventContent);
 
+                        this.TraceEntityMessage(innerContext, operationMessage.EventContent);
                         innerContext.SendEvent(operationMessage.Target, operationMessage.EventName, operationMessage.EventContent);
                     }
                     else if (message is FireAndForgetMessage fireAndForgetMessage)
@@ -561,6 +566,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 }
 
                 this.outbox.Clear();
+            }
+        }
+
+        private void TraceEntityMessage(OrchestrationContext innerContext, object eventContent)
+        {
+            if (!innerContext.IsReplaying)
+            {
+                this.WorkItem.TraceProgress("sends {entityMessage}", eventContent);
             }
         }
 

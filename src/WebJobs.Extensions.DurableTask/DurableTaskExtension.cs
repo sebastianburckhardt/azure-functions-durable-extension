@@ -513,6 +513,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             DurableOrchestrationContext context = (DurableOrchestrationContext)shim.Context;
 
             OrchestrationRuntimeState orchestrationRuntimeState = dispatchContext.GetProperty<OrchestrationRuntimeState>();
+            context.WorkItem = dispatchContext.GetProperty<TaskOrchestrationWorkItem>();
 
             if (orchestrationRuntimeState.ParentInstance != null)
             {
@@ -623,6 +624,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             entityContext.ExecutionId = runtimeState.OrchestrationInstance.ExecutionId;
             entityContext.History = runtimeState.Events;
             entityContext.RawInput = runtimeState.Input;
+            entityContext.WorkItem = dispatchContext.GetProperty<TaskOrchestrationWorkItem>();
 
             try
             {
@@ -671,6 +673,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                                     if (entityContext.State.LockedBy == message.ParentInstanceId)
                                     {
                                         // operation requests from the lock holder are processed immediately
+                                        entityContext.WorkItem.TraceProgress("processes {entityMessage}", message);
                                         entityShim.AddOperationToBatch(message);
                                     }
                                     else
@@ -687,6 +690,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                                 if (entityContext.State.LockedBy == message.ParentInstanceId)
                                 {
+                                    entityContext.WorkItem.TraceProgress("processes {entityMessage}", message);
+
                                     this.TraceHelper.EntityLockReleased(
                                         entityContext.HubName,
                                         entityContext.Name,
@@ -696,6 +701,10 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                                         isReplay: false);
 
                                     entityContext.State.LockedBy = null;
+                                }
+                                else
+                                {
+                                    entityContext.WorkItem.TraceProgress("!!!! drops {entityMessage}", message);
                                 }
                             }
 
@@ -707,6 +716,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 while (entityContext.State.LockedBy == null
                     && entityContext.State.TryDequeue(out var request))
                 {
+                    entityContext.WorkItem.TraceProgress("processes {entityMessage}", request);
+
                     if (request.IsLockRequest)
                     {
                         entityShim.AddLockRequestToBatch(request);
