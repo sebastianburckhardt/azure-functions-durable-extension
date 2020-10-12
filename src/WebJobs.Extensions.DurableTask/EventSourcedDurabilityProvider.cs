@@ -25,6 +25,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         public override bool SupportsPollFreeWait => true;
 
+        public override bool GuaranteesOrderedDelivery => true;
+
         public override TimeSpan MaximumDelayTime { get; set; } = TimeSpan.MaxValue;
 
         /// <summary>

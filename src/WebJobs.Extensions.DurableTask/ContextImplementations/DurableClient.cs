@@ -535,7 +535,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                     }
 
                     if (removeEmptyEntities && !status.EntityExists && status.LockedBy == null && status.QueueSize == 0
-                        && now - state.LastUpdatedTime > TimeSpan.FromMinutes(this.config.Options.EntityMessageReorderWindowInMinutes))
+                        && now - state.LastUpdatedTime > this.config.MessageReorderWindow)
                     {
                         tasks.Add(DeleteIdleOrchestrationEntity(state));
                     }

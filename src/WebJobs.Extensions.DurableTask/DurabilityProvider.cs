@@ -63,6 +63,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         public virtual bool SupportsPollFreeWait => false;
 
         /// <summary>
+        /// Specifies whether this backend delivers messages in order.
+        /// </summary>
+        public virtual bool GuaranteesOrderedDelivery => false;
+
+        /// <summary>
         /// JSON representation of configuration to emit in telemetry.
         /// </summary>
         public virtual JObject ConfigurationJson => EmptyConfig;

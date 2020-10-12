@@ -189,6 +189,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
         internal MessagePayloadDataConverter ErrorDataConverter { get; private set; }
 
+        internal TimeSpan MessageReorderWindow
+            => this.defaultDurabilityProvider.GuaranteesOrderedDelivery ? TimeSpan.Zero : TimeSpan.FromMinutes(this.Options.EntityMessageReorderWindowInMinutes);
+
         private MessagePayloadDataConverter CreateMessageDataConverter(IMessageSerializerSettingsFactory messageSerializerSettingsFactory)
         {
             bool isDefault;
@@ -723,7 +726,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                                 else
                                 {
                                     // run this through the message sorter to help with reordering and duplicate filtering
-                                    deliverNow = entityContext.State.MessageSorter.ReceiveInOrder(requestMessage, entityContext.EntityMessageReorderWindow);
+                                    deliverNow = entityContext.State.MessageSorter.ReceiveInOrder(requestMessage, this.MessageReorderWindow);
                                 }
 
                                 foreach (var message in deliverNow)
