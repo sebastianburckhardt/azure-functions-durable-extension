@@ -87,8 +87,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             var instanceQuery = new InstanceQuery(
                     runtimeStatus: condition.RuntimeStatus?.Select(p => (OrchestrationStatus)Enum.Parse(typeof(OrchestrationStatus), p.ToString())).ToArray(),
-                    createdTimeFrom: condition.CreatedTimeFrom.ToUniversalTime(),
-                    createdTimeTo: condition.CreatedTimeTo.ToUniversalTime(),
+                    createdTimeFrom: (condition.CreatedTimeFrom == default) ? (DateTime?)null : condition.CreatedTimeFrom.ToUniversalTime(),
+                    createdTimeTo: (condition.CreatedTimeTo == default) ? (DateTime?)null : condition.CreatedTimeTo.ToUniversalTime(),
                     instanceIdPrefix: condition.InstanceIdPrefix,
                     fetchInput: condition.ShowInput);
 
