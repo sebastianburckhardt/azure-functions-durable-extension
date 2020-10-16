@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
@@ -12,12 +13,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
     {
         private readonly ITestOutputHelper testOutput;
         private readonly Func<string, LogLevel, bool> filter;
+        private bool traceToTestOutput;
 
         public TestLogger(ITestOutputHelper testOutput, string category, Func<string, LogLevel, bool> filter = null)
         {
             this.testOutput = testOutput;
             this.Category = category;
             this.filter = filter;
+            this.traceToTestOutput = TestHelpers.LoggerCategoriesForTestOutput.Contains(category);
         }
 
         public string Category { get; private set; }
@@ -53,7 +56,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             });
 
             // Only write traces specific to this extension
-            if (this.Category == TestHelpers.LogCategory)
+            if (this.traceToTestOutput)
             {
                 this.testOutput.WriteLine($"    {DateTime.Now:o}: {formattedMessage}");
             }

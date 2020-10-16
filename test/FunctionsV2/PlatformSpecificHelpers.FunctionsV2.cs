@@ -36,6 +36,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                     loggingBuilder =>
                     {
                         loggingBuilder.AddProvider(loggerProvider);
+                        loggingBuilder.SetMinimumLevel(TestHelpers.MinimumLogLevel);
                     })
                 .ConfigureWebJobs(
                     webJobsBuilder =>

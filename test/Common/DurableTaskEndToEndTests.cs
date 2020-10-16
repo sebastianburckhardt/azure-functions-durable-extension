@@ -70,8 +70,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 this.eventSourceListener.OnTraceLog += this.OnEventSourceListenerTraceLog;
 
-                string sessionName = "DTFxTrace" + Guid.NewGuid().ToString("N");
-                this.eventSourceListener.CaptureLogs(sessionName, traceConfig);
+                if (TestHelpers.CaptureETW)
+                {
+                    string sessionName = "DTFxTrace" + Guid.NewGuid().ToString("N");
+                    this.eventSourceListener.CaptureLogs(sessionName, traceConfig);
+                }
             }
         }
 
@@ -1177,7 +1180,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
         [Trait("Category", PlatformSpecificHelpers.TestCategory + "_BVT")]
-        [MemberData(nameof(TestDataGenerator.GetFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        [MemberData(nameof(TestDataGenerator.GetStorageProviderWithRewindOptions), MemberType = typeof(TestDataGenerator))]
         public async Task RewindOrchestration(string storageProvider)
         {
             string[] orchestratorFunctionNames =
@@ -2627,7 +2630,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 Assert.Equal(OrchestrationRuntimeStatus.Completed, status?.RuntimeStatus);
                 HttpManagementPayload httpManagementPayload = status.Output.ToObject<HttpManagementPayload>();
-                ValidateHttpManagementPayload(httpManagementPayload, extendedSessions, "ActivityGetsHttpManagementPayload");
+                ValidateHttpManagementPayload(httpManagementPayload, extendedSessions, storageProvider, "ActivityGetsHttpManagementPayload");
 
                 await host.StopAsync();
             }
@@ -2659,7 +2662,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 var status = await client.WaitForCompletionAsync(this.output);
 
                 HttpManagementPayload httpManagementPayload = client.InnerClient.CreateHttpManagementPayload(status.InstanceId);
-                ValidateHttpManagementPayload(httpManagementPayload, extendedSessions, "OrchestrationClientGetsHttpManagementPayload");
+                ValidateHttpManagementPayload(httpManagementPayload, extendedSessions, storageProvider, "OrchestrationClientGetsHttpManagementPayload");
 
                 Assert.Equal(OrchestrationRuntimeStatus.Completed, status?.RuntimeStatus);
                 Assert.Equal("World", status?.Input);
@@ -3896,16 +3899,22 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 Assert.Equal(instanceId, orchestrationStatus.InstanceId);
                 Assert.True(orchestrationStatus.History.Count > 0);
 
-                int blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", instanceId);
-                Assert.True(blobCount > 0);
+                if (storageProvider == TestHelpers.AzureStorageProviderType)
+                {
+                    int blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", instanceId);
+                    Assert.True(blobCount > 0);
+                }
 
                 await client.InnerClient.PurgeInstanceHistoryAsync(instanceId);
 
                 orchestrationStatus = await client.GetStatusAsync(true);
                 Assert.Null(orchestrationStatus);
 
-                blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", instanceId);
-                Assert.Equal(0, blobCount);
+                if (storageProvider == TestHelpers.AzureStorageProviderType)
+                {
+                    int blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", instanceId);
+                    Assert.Equal(0, blobCount);
+                }
 
                 await host.StopAsync();
             }
@@ -3963,10 +3972,13 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 status = await client.InnerClient.GetStatusAsync(fourthInstanceId, true);
                 Assert.Equal(OrchestrationRuntimeStatus.Completed, status?.RuntimeStatus);
                 Assert.True(status.History.Count > 0);
-                await ValidateBlobUrlAsync(client.TaskHubName, client.InstanceId, (string)status.Output);
 
-                int blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", fourthInstanceId);
-                Assert.True(blobCount > 0);
+                if (storageProvider == TestHelpers.AzureStorageProviderType)
+                {
+                    await ValidateBlobUrlAsync(client.TaskHubName, client.InstanceId, (string)status.Output);
+                    int blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", fourthInstanceId);
+                    Assert.True(blobCount > 0);
+                }
 
                 await client.InnerClient.PurgeInstanceHistoryAsync(
                     startDateTime,
@@ -3990,8 +4002,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                 status = await client.InnerClient.GetStatusAsync(fourthInstanceId, true);
                 Assert.Null(status);
 
-                blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", fourthInstanceId);
-                Assert.Equal(0, blobCount);
+                if (storageProvider == TestHelpers.AzureStorageProviderType)
+                {
+                    var blobCount = await GetBlobCount($"{client.TaskHubName.ToLowerInvariant()}-largemessages", fourthInstanceId);
+                    Assert.Equal(0, blobCount);
+                }
 
                 await host.StopAsync();
             }
@@ -4168,7 +4183,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
         [Theory]
         [Trait("Category", PlatformSpecificHelpers.TestCategory)]
-        [MemberData(nameof(TestDataGenerator.GetFullFeaturedStorageProviderOptions), MemberType = typeof(TestDataGenerator))]
+        [MemberData(nameof(TestDataGenerator.GetStorageProviderWithPagedQueries), MemberType = typeof(TestDataGenerator))]
         public async Task DurableEntity_ListEntitiesAsync_Paging(string storageProvider)
         {
             var yesterday = DateTime.UtcNow.Subtract(TimeSpan.FromDays(1));
@@ -5104,25 +5119,37 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             Assert.True(await blob.ExistsAsync(), $"Blob named {blob.Uri} is expected to exist.");
         }
 
-        private static void ValidateHttpManagementPayload(HttpManagementPayload httpManagementPayload, bool extendedSessions, string defaultTaskHubName)
+        private static void ValidateHttpManagementPayload(HttpManagementPayload httpManagementPayload, bool extendedSessions, string storageProvider, string defaultTaskHubName)
         {
             Assert.NotNull(httpManagementPayload);
             Assert.NotEmpty(httpManagementPayload.Id);
             string instanceId = httpManagementPayload.Id;
             string notificationUrl = TestConstants.NotificationUrlBase;
-            string taskHubName = extendedSessions
-                ? $"{defaultTaskHubName}EX"
-                : defaultTaskHubName;
-            taskHubName += PlatformSpecificHelpers.VersionSuffix;
+            string taskHubName;
+            string storageName;
+
+            if (storageProvider == TestHelpers.EventSourcedProviderType)
+            {
+                storageName = "StorageConnectionString";
+                taskHubName = "testtaskhub";
+            }
+            else
+            {
+                storageName = "AzureWebJobsStorage";
+                taskHubName = extendedSessions
+                  ? $"{defaultTaskHubName}EX"
+                  : defaultTaskHubName;
+                taskHubName += PlatformSpecificHelpers.VersionSuffix;
+            }
 
             Assert.Equal(
-                $"{notificationUrl}/instances/{instanceId}?taskHub={taskHubName}&connection=AzureWebJobsStorage&code=mykey",
+                $"{notificationUrl}/instances/{instanceId}?taskHub={taskHubName}&connection={storageName}&code=mykey",
                 httpManagementPayload.StatusQueryGetUri);
             Assert.Equal(
-                $"{notificationUrl}/instances/{instanceId}/raiseEvent/{{eventName}}?taskHub={taskHubName}&connection=AzureWebJobsStorage&code=mykey",
+                $"{notificationUrl}/instances/{instanceId}/raiseEvent/{{eventName}}?taskHub={taskHubName}&connection={storageName}&code=mykey",
                 httpManagementPayload.SendEventPostUri);
             Assert.Equal(
-                $"{notificationUrl}/instances/{instanceId}/terminate?reason={{text}}&taskHub={taskHubName}&connection=AzureWebJobsStorage&code=mykey",
+                $"{notificationUrl}/instances/{instanceId}/terminate?reason={{text}}&taskHub={taskHubName}&connection={storageName}&code=mykey",
                 httpManagementPayload.TerminatePostUri);
         }
 

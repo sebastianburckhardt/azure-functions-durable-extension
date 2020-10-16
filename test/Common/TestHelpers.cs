@@ -25,9 +25,21 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         public const string EmulatorProviderType = "emulator";
         public const string RedisProviderType = "redis";
         public const string EventSourcedProviderType = "eventsourced";
+        public const string EmptyStorageProviderType = "empty";
 
         public const string LogCategory = "Host.Triggers.DurableTask";
-        public const string EmptyStorageProviderType = "empty";
+        public const Microsoft.Extensions.Logging.LogLevel MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Trace;
+
+        public static string[] LoggerCategoriesForTestOutput => new string[]
+        {
+            "Host.Triggers.DurableTask",
+            "DurableTaskBackend",
+            "DurableTaskBackend.Events",
+            "DurableTaskBackend.FasterStorage",
+            "DurableTaskBackend.EventHubsTransport",
+        };
+
+        public static bool CaptureETW => false;
 
         public static ITestHost GetJobHost(
             ILoggerProvider loggerProvider,
@@ -114,12 +126,33 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             }
             else if (string.Equals(storageProviderType, EventSourcedProviderType))
             {
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString)] = "$Storage";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString)] = "$EventHubsConnection";
                 options.StorageProvider[EventSourcedDurabilityProviderFactory.RunningInTestEnvironmentSetting] = "true";
 
-                // can turn off the reorder window since ordered exactly-once delivery is already guaranteed by EventHubs backend
-                options.EntityMessageReorderWindowInMinutes = 0;
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString)] = "$EventHubsConnection";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventProcessorManagement)] = "";
+
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString)] = "$AzureWebJobsStorage";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PremiumStorageConnectionString)] = "";
+
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UsePSFQueries)] = "false";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UseAlternateObjectStore)] = "false";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UseJsonPackets)] = "Never";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PersistStepsFirst)] = "false";
+
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.TakeStateCheckpointWhenStoppingPartition)] = "true";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberBytesBetweenCheckpoints)] = "20000000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberEventsBetweenCheckpoints)] = "10000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxTimeMsBetweenCheckpoints)] = "60000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PipelineCredits)] = "1000000000";
+
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.LogLevelLimit)] = "Trace";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageLogLevelLimit)] = "Trace";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.TransportLogLevelLimit)] = "Trace";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventLogLevelLimit)] = "Trace";
+
+                options.StorageProvider["TraceToConsole"] = "false";
+                options.StorageProvider["TraceToEtwExtension"] = "false";
+                options.StorageProvider["TraceToBlob"] = "false";
             }
 
             if (eventGridRetryCount.HasValue)

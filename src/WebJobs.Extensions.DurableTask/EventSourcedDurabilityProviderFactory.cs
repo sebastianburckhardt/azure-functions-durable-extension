@@ -50,6 +50,9 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             this.connectionStringResolver = connectionStringResolver;
             this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
 
+            // override DTFx defaults to the defaults we want to use in DF
+            this.eventSourcedSettings.ThrowExceptionOnInvalidDedupeStatus = true;
+
             // copy all applicable fields from both the options and the storageProvider options
             JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options), this.eventSourcedSettings);
             JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedSettings);
