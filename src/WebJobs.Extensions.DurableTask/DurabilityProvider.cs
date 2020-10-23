@@ -251,7 +251,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         }
 
         /// <inheritdoc/>
-        public Task StopAsync(bool isForced)
+        public virtual Task StopAsync(bool isForced)
         {
             return this.GetOrchestrationService().StopAsync(isForced);
         }

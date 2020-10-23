@@ -5322,21 +5322,20 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             Assert.NotEmpty(httpManagementPayload.Id);
             string instanceId = httpManagementPayload.Id;
             string notificationUrl = TestConstants.NotificationUrlBase;
-            string taskHubName;
             string storageName;
+
+            string taskHubName = extendedSessions
+                  ? $"{defaultTaskHubName}EX"
+                  : defaultTaskHubName;
+            taskHubName += PlatformSpecificHelpers.VersionSuffix;
 
             if (storageProvider == TestHelpers.EventSourcedProviderType)
             {
                 storageName = "StorageConnectionString";
-                taskHubName = "testtaskhub";
             }
             else
             {
                 storageName = "AzureWebJobsStorage";
-                taskHubName = extendedSessions
-                  ? $"{defaultTaskHubName}EX"
-                  : defaultTaskHubName;
-                taskHubName += PlatformSpecificHelpers.VersionSuffix;
             }
 
             Assert.Equal(

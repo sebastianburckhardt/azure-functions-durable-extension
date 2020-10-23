@@ -2,9 +2,9 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
-using DurableTask.Core;
 using DurableTask.EventSourced;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Blob;
@@ -16,24 +16,22 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 {
     internal class EventSourcedDurabilityProviderFactory : IDurabilityProviderFactory
     {
-        private readonly Entry entry;
-
-        // If running in test environment, we keep a service running and cache it in a static variable.
-        // Also, we delete previous taskhub before first run.
-        private static Entry cachedTestEntry;
+        private static ConcurrentDictionary<DurableClientAttribute, EventSourcedDurabilityProvider> cachedProviders = new ConcurrentDictionary<DurableClientAttribute, EventSourcedDurabilityProvider>();
 
         private readonly DurableTaskOptions options;
-        private readonly EventSourcedOrchestrationServiceSettings eventSourcedSettings;
         private readonly IConnectionStringResolver connectionStringResolver;
-        private readonly bool runningInTestEnvironment;
-        private readonly bool traceToConsole;
-        private readonly bool traceToEtwExtension;
-        private readonly bool traceToBlob;
-        private readonly ILoggerFactory loggerFactory;
+        private ILoggerFactory loggerFactory;
+
+        private EventSourcedDurabilityProvider defaultProvider;
+
+        private bool reuseTaskHubForAllTests;
+        private bool traceToConsole;
+        private bool traceToEtwExtension;
+        private bool traceToBlob;
 
         // the following are boolean options that can be specified in the json,
         // but are not passed on to the backend
-        public const string RunningInTestEnvironmentSetting = "RunningInTestEnvironment";
+        public const string ReuseTaskHubForTests = "ReuseTaskHubForTests";
         public const string TraceToConsole = "TraceToConsole";
         public const string TraceToEtwExtension = "TraceToEtwExtension";
         public const string TraceToBlob = "TraceToBlob";
@@ -44,60 +42,70 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             ILoggerFactory loggerFactory)
         {
             // for debugging
-            System.Threading.Thread.Sleep(5000);
+            // System.Threading.Thread.Sleep(5000);
 
             this.options = options.Value;
             this.connectionStringResolver = connectionStringResolver;
-            this.eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
+            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        }
+
+        private EventSourcedOrchestrationServiceSettings GetEventSourcedSettings(string taskHubNameOverride = null)
+        {
+            var eventSourcedSettings = new EventSourcedOrchestrationServiceSettings();
 
             // override DTFx defaults to the defaults we want to use in DF
-            this.eventSourcedSettings.ThrowExceptionOnInvalidDedupeStatus = true;
+            eventSourcedSettings.ThrowExceptionOnInvalidDedupeStatus = true;
 
             // copy all applicable fields from both the options and the storageProvider options
-            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options), this.eventSourcedSettings);
-            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), this.eventSourcedSettings);
+            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options), eventSourcedSettings);
+            JsonConvert.PopulateObject(JsonConvert.SerializeObject(this.options.StorageProvider), eventSourcedSettings);
 
             bool ReadBooleanSetting(string name) => this.options.StorageProvider.TryGetValue(name, out object objValue)
                 && objValue is string stringValue && bool.TryParse(stringValue, out bool boolValue) && boolValue;
 
-            this.runningInTestEnvironment = ReadBooleanSetting(RunningInTestEnvironmentSetting);
+            this.reuseTaskHubForAllTests = ReadBooleanSetting(ReuseTaskHubForTests);
             this.traceToConsole = ReadBooleanSetting(TraceToConsole);
             this.traceToEtwExtension = ReadBooleanSetting(TraceToEtwExtension);
             this.traceToBlob = ReadBooleanSetting(TraceToBlob);
 
             // resolve any indirection in the specification of the two connection strings
-            this.eventSourcedSettings.StorageConnectionString = this.ResolveIndirection(
-                this.eventSourcedSettings.StorageConnectionString,
+            eventSourcedSettings.StorageConnectionString = this.ResolveIndirection(
+                eventSourcedSettings.StorageConnectionString,
                 nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString));
-            this.eventSourcedSettings.EventHubsConnectionString = this.ResolveIndirection(
-                this.eventSourcedSettings.EventHubsConnectionString,
+            eventSourcedSettings.EventHubsConnectionString = this.ResolveIndirection(
+                eventSourcedSettings.EventHubsConnectionString,
                 nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString));
 
-            // if worker id is specified in environment, it overrides the file setting
+            // if worker id is specified in environment, it overrides the configured setting
             string workerId = Environment.GetEnvironmentVariable("WorkerId");
             if (!string.IsNullOrEmpty(workerId))
             {
-                this.eventSourcedSettings.WorkerId = workerId;
+                eventSourcedSettings.WorkerId = workerId;
             }
 
-            if (this.runningInTestEnvironment)
+            eventSourcedSettings.HubName = this.options.HubName;
+
+            if (taskHubNameOverride != null)
             {
-                // use a single task hub name for all tests to allow reuse between tests with same settings
-                this.options.HubName = "test-taskhub";
-                this.eventSourcedSettings.KeepServiceRunning = true;
+                eventSourcedSettings.HubName = taskHubNameOverride;
             }
 
-            // if the taskhubname is not valid, replace it with a default
-            if (!AzureStorageOptions.IsSanitizedHubName(this.options.HubName, out string sanitizedHubName))
+            if (this.reuseTaskHubForAllTests)
             {
-                this.options.SetDefaultHubName(sanitizedHubName);
+                eventSourcedSettings.HubName = "test-taskhub";
+                eventSourcedSettings.KeepServiceRunning = true;
             }
 
-            // make sure the settings we pass on have the fields correctly set
-            this.eventSourcedSettings.HubName = this.options.HubName;
+            // TODO sanitize hubname in the same way as AzureStorage does
+
+            return eventSourcedSettings;
+        }
+
+        public void CreateDefaultProvider()
+        {
+            var settings = this.GetEventSourcedSettings();
 
             // Use a temporary logger/traceHelper because DurableTaskExtension hasn't been called yet to create one.
-            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
             var providerFactoryName = nameof(EventSourcedDurabilityProviderFactory);
             ILogger logger = this.loggerFactory.CreateLogger(providerFactoryName);
             var traceHelper = new EndToEndTraceHelper(logger, false);
@@ -109,42 +117,63 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 this.loggerFactory = new LoggerFactoryWrapper(this.loggerFactory, this.options.HubName, this);
             }
 
-            if (this.runningInTestEnvironment && cachedTestEntry != null)
+            var key = new DurableClientAttribute()
             {
-                if (this.eventSourcedSettings.Equals(cachedTestEntry.Settings))
-                {
-                    // We simply use the cached orchestration service, which is still running.
-                    this.entry = cachedTestEntry;
-                    return;
-                }
-
-                if (cachedTestEntry.DurabilityProvider != null)
-                {
-                    // The service must be stopped now since we are about to start a new one with different settings
-                    ((IOrchestrationService)cachedTestEntry.DurabilityProvider).StopAsync().Wait();
-                }
-            }
-
-            this.entry = new Entry()
-            {
-                Settings = this.eventSourcedSettings,
-                DurabilityProvider = new EventSourcedDurabilityProvider(new EventSourcedOrchestrationService(this.eventSourcedSettings, this.loggerFactory)),
+                TaskHub = settings.HubName,
+                ConnectionName = settings.StorageConnectionString,
             };
 
-            if (this.runningInTestEnvironment)
+            if (this.reuseTaskHubForAllTests && cachedProviders.TryGetValue(key, out var cachedProviderFromLastTest))
             {
-                if (cachedTestEntry == null)
-                {
-                    // delete the test taskhub before the first test is run
-                    ((IOrchestrationService)this.entry.DurabilityProvider).DeleteAsync().Wait();
-                }
-
-                cachedTestEntry = this.entry;
+                // We simply use the cached orchestration service, which is still running,
+                // but change the extended sessions setting, which is dynamically checked by the implementation.
+                cachedProviderFromLastTest.Settings.ExtendedSessionsEnabled = settings.ExtendedSessionsEnabled;
+                this.defaultProvider = cachedProviderFromLastTest;
+            }
+            else
+            {
+                var service = new EventSourcedOrchestrationService(settings, this.loggerFactory);
+                this.defaultProvider = new EventSourcedDurabilityProvider(service, settings);
+                cachedProviders[key] = this.defaultProvider;
             }
         }
 
-        private string ResolveIndirection(string value, string propertyName)
+        public DurabilityProvider GetDurabilityProvider(DurableClientAttribute attribute)
         {
+            EventSourcedOrchestrationServiceSettings settings = this.GetEventSourcedSettings(attribute.TaskHub);
+
+            if (string.Equals(this.defaultProvider.Settings.HubName, settings.HubName, StringComparison.OrdinalIgnoreCase) &&
+                 string.Equals(this.defaultProvider.Settings.StorageConnectionString, settings.StorageConnectionString, StringComparison.OrdinalIgnoreCase))
+            {
+                return this.defaultProvider;
+            }
+
+            DurableClientAttribute key = new DurableClientAttribute()
+            {
+                TaskHub = settings.HubName,
+                ConnectionName = settings.StorageConnectionString,
+            };
+
+            return cachedProviders.GetOrAdd(key, _ =>
+            {
+                var service = new EventSourcedOrchestrationService(settings, this.loggerFactory);
+                return new EventSourcedDurabilityProvider(service, settings);
+            });
+        }
+
+        public static bool RemoveDurabilityProvider(EventSourcedDurabilityProvider provider)
+        {
+            return cachedProviders.TryRemove(
+                new DurableClientAttribute()
+                {
+                    TaskHub = provider.Settings.HubName,
+                    ConnectionName = provider.Settings.StorageConnectionString,
+                },
+                out _);
+        }
+
+        private string ResolveIndirection(string value, string propertyName)
+            {
             string envName;
             string setting;
 
@@ -184,20 +213,17 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             }
         }
 
-        internal string GetDefaultStorageConnectionString() => this.entry.Settings.StorageConnectionString;
+        internal string GetDefaultStorageConnectionString()
+            => this.defaultProvider.Settings.StorageConnectionString;
 
-        public DurabilityProvider GetDurabilityProvider() => this.entry.DurabilityProvider;
-
-        public DurabilityProvider GetDurabilityProvider(DurableClientAttribute attribute)
+        public DurabilityProvider GetDurabilityProvider()
         {
-            return this.entry.DurabilityProvider; // TODO consider clients for other apps
-        }
+            if (this.defaultProvider == null)
+            {
+                this.CreateDefaultProvider();
+            }
 
-        private class Entry
-        {
-            public EventSourcedOrchestrationServiceSettings Settings { get; set; }
-
-            public EventSourcedDurabilityProvider DurabilityProvider { get; set; }
+            return this.defaultProvider;
         }
 
         private class LoggerFactoryWrapper : ILoggerFactory
@@ -249,7 +275,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             public LoggerWrapper(ILogger logger, string category, string hubName, EventSourcedDurabilityProviderFactory providerFactory, BlobLogger blobLogger)
             {
                 this.logger = logger;
-                this.prefix = $"{providerFactory.eventSourcedSettings.WorkerId} [{category}]";
+                this.prefix = $"{providerFactory.defaultProvider.Settings.WorkerId} [{category}]";
                 this.hubName = hubName;
                 this.providerFactory = providerFactory;
                 this.blobLogger = blobLogger;
@@ -313,11 +339,11 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
             {
                 this.starttime = DateTime.UtcNow;
 
-                var storageAccount = CloudStorageAccount.Parse(providerFactory.eventSourcedSettings.StorageConnectionString);
+                var storageAccount = CloudStorageAccount.Parse(providerFactory.defaultProvider.Settings.StorageConnectionString);
                 var client = storageAccount.CreateCloudBlobClient();
                 var container = client.GetContainerReference("logs");
                 container.CreateIfNotExists();
-                this.blob = container.GetAppendBlobReference($"{providerFactory.eventSourcedSettings.WorkerId}.{this.starttime:o}.log");
+                this.blob = container.GetAppendBlobReference($"{providerFactory.defaultProvider.Settings.WorkerId}.{this.starttime:o}.log");
                 this.blob.CreateOrReplace();
 
                 this.memoryStream = new MemoryStream();

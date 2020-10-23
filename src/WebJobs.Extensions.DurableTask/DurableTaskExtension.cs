@@ -743,7 +743,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                                     if (entityContext.State.LockedBy == message.ParentInstanceId)
                                     {
                                         // operation requests from the lock holder are processed immediately
-                                        entityContext.WorkItem.TraceProgress("processes {entityMessage}", message);
+                                        entityContext.TraceWorkItemProgress("processes {entityMessage}", message);
                                         entityShim.AddOperationToBatch(message);
                                     }
                                     else
@@ -760,7 +760,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
 
                                 if (entityContext.State.LockedBy == message.ParentInstanceId)
                                 {
-                                    entityContext.WorkItem.TraceProgress("processes {entityMessage}", message);
+                                    entityContext.TraceWorkItemProgress("processes {entityMessage}", message);
 
                                     this.TraceHelper.EntityLockReleased(
                                         entityContext.HubName,
@@ -774,7 +774,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                                 }
                                 else
                                 {
-                                    entityContext.WorkItem.TraceProgress("!!!! drops {entityMessage}", message);
+                                    entityContext.TraceWorkItemProgress("!!!! drops {entityMessage}", message);
                                 }
                             }
 
@@ -786,7 +786,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
                 while (entityContext.State.LockedBy == null
                     && entityContext.State.TryDequeue(out var request))
                 {
-                    entityContext.WorkItem.TraceProgress("processes {entityMessage}", request);
+                    entityContext.TraceWorkItemProgress("processes {entityMessage}", request);
 
                     if (request.IsLockRequest)
                     {

@@ -30,6 +30,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         public const string LogCategory = "Host.Triggers.DurableTask";
         public const Microsoft.Extensions.Logging.LogLevel MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Trace;
 
+        // testing modalities for EventSourced provider
+        public const bool ESUseFasterStorage = true;
+        public const bool ESUseEventHubsTransport = false;
+        public const bool ESReuseTaskHubBetweenTests = true;
+        public const bool ESTakeCheckpointsDuringTests = false;
+
+        // The regex pattern that parses our Linux Dedicated logs
+        public static readonly string RegexPattern = "(?<Account>[^,]*),(?<ActiveActivities>[^,]*),(?<ActiveOrchestrators>[^,]*),(?<Age>[^,]*),(?<AppName>[^,]*),(?<ContinuedAsNew>[^,]*),(?<CreatedTimeFrom>[^,]*),(?<CreatedTimeTo>[^,]*),(?<DequeueCount>[^,]*),\"(?<Details>[^\"]*)\",(?<Duration>[^,]*),(?<ETag>[^,]*),(?<Episode>[^,]*),(?<EventCount>[^,]*),(?<EventName>[^,]*),(?<EventType>[^,]*),(?<Exception>[^,]*),\"(?<ExceptionMessage>[^\"]*)\",(?<ExecutionId>[^,]*),(?<ExtensionVersion>[^,]*),(?<FromWorkerName>[^,]*),(?<FunctionName>[^,]*),(?<FunctionState>[^,]*),(?<FunctionType>[^,]*),(?<Input>[^,]*),(?<InstanceId>[^,]*),(?<IsCheckpointComplete>[^,]*),(?<IsExtendedSession>[^,]*),(?<IsReplay>[^,]*),(?<LastCheckpointTime>[^,]*),(?<LatencyMs>[^,]*),(?<MessageId>[^,]*),(?<MessagesRead>[^,]*),(?<MessagesSent>[^,]*),(?<MessagesUpdated>[^,]*),(?<NewEventCount>[^,]*),(?<NewEvents>[^,]*),(?<NextVisibleTime>[^,]*),(?<OperationId>[^,]*),(?<OperationName>[^,]*),(?<Output>[^,]*),(?<PartitionId>[^,]*),(?<PendingOrchestratorMessages>[^,]*),(?<PendingOrchestrators>[^,]*),(?<Reason>[^,]*),(?<RelatedActivityId>[^,]*),(?<RequestCount>[^,]*),(?<RequestId>[^,]*),(?<RequestingExecutionId>[^,]*),(?<RequestingInstance>[^,]*),(?<RequestingInstanceId>[^,]*),(?<Result>[^,]*),(?<RuntimeStatus>[^,]*),(?<SequenceNumber>[^,]*),(?<SizeInBytes>[^,]*),(?<SlotName>[^,]*),(?<StatusCode>[^,]*),(?<StorageRequests>[^,]*),(?<Success>[^,]*),(?<TableEntitiesRead>[^,]*),(?<TableEntitiesWritten>[^,]*),(?<TargetExecutionId>[^,]*),(?<TargetInstanceId>[^,]*),(?<TaskEventId>[^,]*),(?<TaskHub>[^,]*),(?<Token>[^,]*),(?<TotalEventCount>[^,]*),(?<Version>[^,]*),(?<VisibilityTimeoutSeconds>[^,]*),(?<WorkerName>[^,]*)";
+
         public static string[] LoggerCategoriesForTestOutput => new string[]
         {
             "Host.Triggers.DurableTask",
@@ -40,9 +49,6 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         };
 
         public static bool CaptureETW => false;
-
-        // The regex pattern that parses our Linux Dedicated logs
-        public static readonly string RegexPattern = "(?<Account>[^,]*),(?<ActiveActivities>[^,]*),(?<ActiveOrchestrators>[^,]*),(?<Age>[^,]*),(?<AppName>[^,]*),(?<ContinuedAsNew>[^,]*),(?<CreatedTimeFrom>[^,]*),(?<CreatedTimeTo>[^,]*),(?<DequeueCount>[^,]*),\"(?<Details>[^\"]*)\",(?<Duration>[^,]*),(?<ETag>[^,]*),(?<Episode>[^,]*),(?<EventCount>[^,]*),(?<EventName>[^,]*),(?<EventType>[^,]*),(?<Exception>[^,]*),\"(?<ExceptionMessage>[^\"]*)\",(?<ExecutionId>[^,]*),(?<ExtensionVersion>[^,]*),(?<FromWorkerName>[^,]*),(?<FunctionName>[^,]*),(?<FunctionState>[^,]*),(?<FunctionType>[^,]*),(?<Input>[^,]*),(?<InstanceId>[^,]*),(?<IsCheckpointComplete>[^,]*),(?<IsExtendedSession>[^,]*),(?<IsReplay>[^,]*),(?<LastCheckpointTime>[^,]*),(?<LatencyMs>[^,]*),(?<MessageId>[^,]*),(?<MessagesRead>[^,]*),(?<MessagesSent>[^,]*),(?<MessagesUpdated>[^,]*),(?<NewEventCount>[^,]*),(?<NewEvents>[^,]*),(?<NextVisibleTime>[^,]*),(?<OperationId>[^,]*),(?<OperationName>[^,]*),(?<Output>[^,]*),(?<PartitionId>[^,]*),(?<PendingOrchestratorMessages>[^,]*),(?<PendingOrchestrators>[^,]*),(?<Reason>[^,]*),(?<RelatedActivityId>[^,]*),(?<RequestCount>[^,]*),(?<RequestId>[^,]*),(?<RequestingExecutionId>[^,]*),(?<RequestingInstance>[^,]*),(?<RequestingInstanceId>[^,]*),(?<Result>[^,]*),(?<RuntimeStatus>[^,]*),(?<SequenceNumber>[^,]*),(?<SizeInBytes>[^,]*),(?<SlotName>[^,]*),(?<StatusCode>[^,]*),(?<StorageRequests>[^,]*),(?<Success>[^,]*),(?<TableEntitiesRead>[^,]*),(?<TableEntitiesWritten>[^,]*),(?<TargetExecutionId>[^,]*),(?<TargetInstanceId>[^,]*),(?<TaskEventId>[^,]*),(?<TaskHub>[^,]*),(?<Token>[^,]*),(?<TotalEventCount>[^,]*),(?<Version>[^,]*),(?<VisibilityTimeoutSeconds>[^,]*),(?<WorkerName>[^,]*)";
 
         public static ITestHost GetJobHost(
             ILoggerProvider loggerProvider,
@@ -129,26 +135,26 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
                     options.StorageProvider["maxQueuePollingInterval"] = maxQueuePollingInterval.Value;
                 }
             }
+
+            // EventSourced provider specific tests
             else if (string.Equals(storageProviderType, EventSourcedProviderType))
             {
-                options.StorageProvider[EventSourcedDurabilityProviderFactory.RunningInTestEnvironmentSetting] = "true";
-
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString)] = "$EventHubsConnection";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventProcessorManagement)] = "";
+                options.StorageProvider[EventSourcedDurabilityProviderFactory.ReuseTaskHubForTests] = ESReuseTaskHubBetweenTests.ToString();
 
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageConnectionString)] = "$AzureWebJobsStorage";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventHubsConnectionString)] =
+                    ESUseEventHubsTransport ? "$EventHubsConnection" : (ESUseFasterStorage ? "MemoryF:4" : "Memory:8");
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.EventProcessorManagement)] = "EventHubs";
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PremiumStorageConnectionString)] = "";
-
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UsePSFQueries)] = "false";
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UseAlternateObjectStore)] = "false";
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.UseJsonPackets)] = "Never";
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PersistStepsFirst)] = "false";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.TakeStateCheckpointWhenStoppingPartition)] = "false";
 
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.TakeStateCheckpointWhenStoppingPartition)] = "true";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberBytesBetweenCheckpoints)] = "20000000";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberEventsBetweenCheckpoints)] = "10000";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxTimeMsBetweenCheckpoints)] = "60000";
-                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.PipelineCredits)] = "1000000000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberBytesBetweenCheckpoints)] = ESTakeCheckpointsDuringTests ? "10000000" : "20000000000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxNumberEventsBetweenCheckpoints)] = ESTakeCheckpointsDuringTests ? "2000" : "1000000000";
+                options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.MaxTimeMsBetweenCheckpoints)] = ESTakeCheckpointsDuringTests ? "20000" : "6000000000";
 
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.LogLevelLimit)] = "Trace";
                 options.StorageProvider[nameof(EventSourcedOrchestrationServiceSettings.StorageLogLevelLimit)] = "Trace";

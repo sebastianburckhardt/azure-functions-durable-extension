@@ -593,7 +593,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             if (!innerContext.IsReplaying)
             {
-                this.WorkItem.TraceProgress("sends {entityMessage}", eventContent);
+                this.TraceWorkItemProgress("sends {entityMessage}", eventContent);
             }
         }
 

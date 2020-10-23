@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using DurableTask.Core.History;
@@ -51,6 +52,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             await Task.WhenAll(this.deferredTasks.Select(x => x()));
             this.deferredTasks.Clear();
+        }
+
+        [Conditional("false")]
+        internal void TraceWorkItemProgress(string format, object arg)
+        {
+            // TODO hook this up with tracing in the backend when it is implemented
         }
     }
 }
