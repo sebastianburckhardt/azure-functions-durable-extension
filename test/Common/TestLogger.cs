@@ -58,7 +58,15 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             // Only write traces specific to this extension
             if (this.traceToTestOutput)
             {
-                this.testOutput.WriteLine($"    {DateTime.Now:o}: {formattedMessage}");
+                try
+                {
+                    this.testOutput.WriteLine($"    {DateTime.Now:o}: {formattedMessage}");
+                }
+                catch (InvalidOperationException)
+                {
+                    // swallow this exception;
+                    // it is thrown by XUnit if the back end traces events while there is no test running.
+                }
             }
         }
     }
