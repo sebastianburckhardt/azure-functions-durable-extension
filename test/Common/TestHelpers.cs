@@ -33,7 +33,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         // testing modalities for EventSourced provider
         public const bool ESUseFasterStorage = true;
         public const bool ESUseEventHubsTransport = false;
-        public const bool ESReuseTaskHubBetweenTests = true;
+        public const bool ESReuseTaskHubBetweenTests = false;
         public const bool ESTakeCheckpointsDuringTests = false;
 
         // The regex pattern that parses our Linux Dedicated logs
