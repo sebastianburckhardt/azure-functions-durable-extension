@@ -48,7 +48,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             "DurableTaskBackend.EventHubsTransport",
         };
 
-        public static bool CaptureETWInTestOutput => false;
+        // set this to false during local debugging if encountering COM resource exceptions
+        public static bool CaptureETWInTestOutput => true;
 
         public static ITestHost GetJobHost(
             ILoggerProvider loggerProvider,
