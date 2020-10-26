@@ -16,14 +16,14 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
     {
         private readonly EventSourcedOrchestrationService serviceClient;
 
-        public EventSourcedOrchestrationServiceSettings Settings { get; private set; }
-
         internal EventSourcedDurabilityProvider(EventSourcedOrchestrationService service, EventSourcedOrchestrationServiceSettings settings)
             : base("EventSourced", service, service, "StorageConnectionString")
         {
             this.serviceClient = service;
             this.Settings = settings;
         }
+
+        public EventSourcedOrchestrationServiceSettings Settings { get; private set; }
 
         public override bool SupportsEntities => true;
 
@@ -43,7 +43,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask
         {
             if (!this.Settings.KeepServiceRunning)
             {
-                await serviceClient.StopAsync(isForced);
+                await this.serviceClient.StopAsync(isForced);
                 EventSourcedDurabilityProviderFactory.RemoveDurabilityProvider(this);
             }
             else

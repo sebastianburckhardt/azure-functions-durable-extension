@@ -17,12 +17,12 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
         private static readonly object[] PagedQueriesStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
         private static readonly object[] AllStorageProviders = new object[] { TestHelpers.AzureStorageProviderType, TestHelpers.RedisProviderType, TestHelpers.EventSourcedProviderType };
 #else
-        private static readonly object[] ExtendedSessionsStorageProviders = new object[] { TestHelpers.AzureStorageProviderType};
+        private static readonly object[] ExtendedSessionsStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
         private static readonly object[] HistoryStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
         private static readonly object[] FullFeaturedStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
         private static readonly object[] RewindStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
         private static readonly object[] PagedQueriesStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
-        private static readonly object[] AllStorageProviders = new object[] { TestHelpers.AzureStorageProviderType }; 
+        private static readonly object[] AllStorageProviders = new object[] { TestHelpers.AzureStorageProviderType };
 #endif
 
         public static IEnumerable<object[]> GetFullFeaturedStorageProviderOptions()
