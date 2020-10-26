@@ -48,7 +48,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
             "DurableTaskBackend.EventHubsTransport",
         };
 
-        public static bool CaptureETW => false;
+        public static bool CaptureETWInTestOutput => false;
 
         public static ITestHost GetJobHost(
             ILoggerProvider loggerProvider,

@@ -71,7 +71,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.DurableTask.Tests
 
                 this.eventSourceListener.OnTraceLog += this.OnEventSourceListenerTraceLog;
 
-                if (TestHelpers.CaptureETW)
+                if (TestHelpers.CaptureETWInTestOutput)
                 {
                     string sessionName = "DTFxTrace" + Guid.NewGuid().ToString("N");
                     this.eventSourceListener.CaptureLogs(sessionName, traceConfig);
